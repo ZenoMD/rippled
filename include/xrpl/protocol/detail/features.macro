@@ -16,7 +16,7 @@
 // Keep it sorted in reverse chronological order.
 
 // Requires LendingProtocolV1_1 and ConfidentialTransfer.
-XRPL_FEATURE(ConfidentialLendingProtocol, Supported::No,  VoteBehavior::DefaultNo)
+XRPL_FEATURE(ConfidentialLendingProtocol, Supported::Yes, VoteBehavior::DefaultNo)
 XRPL_FEATURE(Cosign,                      Supported::No,  VoteBehavior::DefaultNo)
 XRPL_FEATURE(SmartEscrow,                 Supported::No,  VoteBehavior::DefaultNo)
 // Requires LendingProtocolV1_1. New vaults take FixedPrecision plus cash-basis.
