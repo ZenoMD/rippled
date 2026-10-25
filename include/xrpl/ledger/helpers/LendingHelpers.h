@@ -1,6 +1,7 @@
 #pragma once
 
 #include <xrpl/basics/Number.h>
+#include <xrpl/basics/Slice.h>
 #include <xrpl/basics/chrono.h>
 #include <xrpl/beast/utility/Journal.h>
 #include <xrpl/beast/utility/Zero.h>
@@ -139,6 +140,27 @@ checkLendingProtocolDependencies(Rules const& rules, STTx const& tx);
 // Confidential lending builds on LendingProtocolV1_1 and ConfidentialTransfer.
 bool
 checkConfidentialLendingDependencies(Rules const& rules);
+
+/**
+ * Move a confidential amount from one holder's spending balance to another's
+ * inbox, as XLS-96 ConfidentialMPTSend does: debit the sender's spending
+ * balance and mirrors, credit the destination's inbox and mirrors with the
+ * re-randomized ciphertexts, and increment the sender's version.
+ *
+ * @param randomness The 32 bytes used to re-randomize the credited ciphertexts
+ *        (the start of the transaction's ZKProof).
+ */
+[[nodiscard]] TER
+moveConfidentialAmount(
+    ApplyView& view,
+    SLE::ConstRef issuance,
+    SLE::Ref sender,
+    SLE::Ref destination,
+    Slice const& senderAmount,
+    Slice const& destinationAmount,
+    Slice const& issuerAmount,
+    Slice const& auditorAmount,
+    Slice const& randomness);
 
 /**
  * The accounts and asset that LoanManage::defaultLoan's fixCleanup3_4_0

@@ -47,6 +47,17 @@ TEST(LoanTests, BuilderSettersRoundTrip)
     auto const totalValueOutstandingValue = canonical_NUMBER();
     auto const managementFeeOutstandingValue = canonical_NUMBER();
     auto const loanScaleValue = canonical_INT32();
+    auto const loanAuditorEncryptionKeyValue = canonical_VL();
+    auto const borrowerEncryptedPrincipalValue = canonical_VL();
+    auto const brokerEncryptedPrincipalValue = canonical_VL();
+    auto const loanAuditorEncryptedPrincipalValue = canonical_VL();
+    auto const borrowerEncryptedAmountOwedValue = canonical_VL();
+    auto const brokerEncryptedAmountOwedValue = canonical_VL();
+    auto const loanAuditorEncryptedAmountOwedValue = canonical_VL();
+    auto const borrowerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const brokerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const loanAuditorEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const confidentialLoanVersionValue = canonical_UINT32();
 
     LoanBuilder builder{
         previousTxnIDValue,
@@ -78,6 +89,17 @@ TEST(LoanTests, BuilderSettersRoundTrip)
     builder.setTotalValueOutstanding(totalValueOutstandingValue);
     builder.setManagementFeeOutstanding(managementFeeOutstandingValue);
     builder.setLoanScale(loanScaleValue);
+    builder.setLoanAuditorEncryptionKey(loanAuditorEncryptionKeyValue);
+    builder.setBorrowerEncryptedPrincipal(borrowerEncryptedPrincipalValue);
+    builder.setBrokerEncryptedPrincipal(brokerEncryptedPrincipalValue);
+    builder.setLoanAuditorEncryptedPrincipal(loanAuditorEncryptedPrincipalValue);
+    builder.setBorrowerEncryptedAmountOwed(borrowerEncryptedAmountOwedValue);
+    builder.setBrokerEncryptedAmountOwed(brokerEncryptedAmountOwedValue);
+    builder.setLoanAuditorEncryptedAmountOwed(loanAuditorEncryptedAmountOwedValue);
+    builder.setBorrowerEncryptedPeriodicPayment(borrowerEncryptedPeriodicPaymentValue);
+    builder.setBrokerEncryptedPeriodicPayment(brokerEncryptedPeriodicPaymentValue);
+    builder.setLoanAuditorEncryptedPeriodicPayment(loanAuditorEncryptedPeriodicPaymentValue);
+    builder.setConfidentialLoanVersion(confidentialLoanVersionValue);
 
     builder.setLedgerIndex(index);
     builder.setFlags(0x1u);
@@ -284,6 +306,94 @@ TEST(LoanTests, BuilderSettersRoundTrip)
         EXPECT_TRUE(entry.hasLoanScale());
     }
 
+    {
+        auto const& expected = loanAuditorEncryptionKeyValue;
+        auto const actualOpt = entry.getLoanAuditorEncryptionKey();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptionKey");
+        EXPECT_TRUE(entry.hasLoanAuditorEncryptionKey());
+    }
+
+    {
+        auto const& expected = borrowerEncryptedPrincipalValue;
+        auto const actualOpt = entry.getBorrowerEncryptedPrincipal();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedPrincipal");
+        EXPECT_TRUE(entry.hasBorrowerEncryptedPrincipal());
+    }
+
+    {
+        auto const& expected = brokerEncryptedPrincipalValue;
+        auto const actualOpt = entry.getBrokerEncryptedPrincipal();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedPrincipal");
+        EXPECT_TRUE(entry.hasBrokerEncryptedPrincipal());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPrincipalValue;
+        auto const actualOpt = entry.getLoanAuditorEncryptedPrincipal();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedPrincipal");
+        EXPECT_TRUE(entry.hasLoanAuditorEncryptedPrincipal());
+    }
+
+    {
+        auto const& expected = borrowerEncryptedAmountOwedValue;
+        auto const actualOpt = entry.getBorrowerEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedAmountOwed");
+        EXPECT_TRUE(entry.hasBorrowerEncryptedAmountOwed());
+    }
+
+    {
+        auto const& expected = brokerEncryptedAmountOwedValue;
+        auto const actualOpt = entry.getBrokerEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedAmountOwed");
+        EXPECT_TRUE(entry.hasBrokerEncryptedAmountOwed());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedAmountOwedValue;
+        auto const actualOpt = entry.getLoanAuditorEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedAmountOwed");
+        EXPECT_TRUE(entry.hasLoanAuditorEncryptedAmountOwed());
+    }
+
+    {
+        auto const& expected = borrowerEncryptedPeriodicPaymentValue;
+        auto const actualOpt = entry.getBorrowerEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedPeriodicPayment");
+        EXPECT_TRUE(entry.hasBorrowerEncryptedPeriodicPayment());
+    }
+
+    {
+        auto const& expected = brokerEncryptedPeriodicPaymentValue;
+        auto const actualOpt = entry.getBrokerEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedPeriodicPayment");
+        EXPECT_TRUE(entry.hasBrokerEncryptedPeriodicPayment());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPeriodicPaymentValue;
+        auto const actualOpt = entry.getLoanAuditorEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedPeriodicPayment");
+        EXPECT_TRUE(entry.hasLoanAuditorEncryptedPeriodicPayment());
+    }
+
+    {
+        auto const& expected = confidentialLoanVersionValue;
+        auto const actualOpt = entry.getConfidentialLoanVersion();
+        ASSERT_TRUE(actualOpt.has_value());
+        expectEqualField(expected, *actualOpt, "sfConfidentialLoanVersion");
+        EXPECT_TRUE(entry.hasConfidentialLoanVersion());
+    }
+
     EXPECT_TRUE(entry.hasLedgerIndex());
     auto const ledgerIndex = entry.getLedgerIndex();
     ASSERT_TRUE(ledgerIndex.has_value());
@@ -324,6 +434,17 @@ TEST(LoanTests, BuilderFromSleRoundTrip)
     auto const totalValueOutstandingValue = canonical_NUMBER();
     auto const managementFeeOutstandingValue = canonical_NUMBER();
     auto const loanScaleValue = canonical_INT32();
+    auto const loanAuditorEncryptionKeyValue = canonical_VL();
+    auto const borrowerEncryptedPrincipalValue = canonical_VL();
+    auto const brokerEncryptedPrincipalValue = canonical_VL();
+    auto const loanAuditorEncryptedPrincipalValue = canonical_VL();
+    auto const borrowerEncryptedAmountOwedValue = canonical_VL();
+    auto const brokerEncryptedAmountOwedValue = canonical_VL();
+    auto const loanAuditorEncryptedAmountOwedValue = canonical_VL();
+    auto const borrowerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const brokerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const loanAuditorEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const confidentialLoanVersionValue = canonical_UINT32();
 
     auto sle = std::make_shared<SLE>(Loan::entryType, index);
 
@@ -354,6 +475,17 @@ TEST(LoanTests, BuilderFromSleRoundTrip)
     sle->at(sfTotalValueOutstanding) = totalValueOutstandingValue;
     sle->at(sfManagementFeeOutstanding) = managementFeeOutstandingValue;
     sle->at(sfLoanScale) = loanScaleValue;
+    sle->at(sfLoanAuditorEncryptionKey) = loanAuditorEncryptionKeyValue;
+    sle->at(sfBorrowerEncryptedPrincipal) = borrowerEncryptedPrincipalValue;
+    sle->at(sfBrokerEncryptedPrincipal) = brokerEncryptedPrincipalValue;
+    sle->at(sfLoanAuditorEncryptedPrincipal) = loanAuditorEncryptedPrincipalValue;
+    sle->at(sfBorrowerEncryptedAmountOwed) = borrowerEncryptedAmountOwedValue;
+    sle->at(sfBrokerEncryptedAmountOwed) = brokerEncryptedAmountOwedValue;
+    sle->at(sfLoanAuditorEncryptedAmountOwed) = loanAuditorEncryptedAmountOwedValue;
+    sle->at(sfBorrowerEncryptedPeriodicPayment) = borrowerEncryptedPeriodicPaymentValue;
+    sle->at(sfBrokerEncryptedPeriodicPayment) = brokerEncryptedPeriodicPaymentValue;
+    sle->at(sfLoanAuditorEncryptedPeriodicPayment) = loanAuditorEncryptedPeriodicPaymentValue;
+    sle->at(sfConfidentialLoanVersion) = confidentialLoanVersionValue;
 
     LoanBuilder builderFromSle{sle};
     EXPECT_TRUE(builderFromSle.validate());
@@ -685,6 +817,149 @@ TEST(LoanTests, BuilderFromSleRoundTrip)
         expectEqualField(expected, *fromBuilderOpt, "sfLoanScale");
     }
 
+    {
+        auto const& expected = loanAuditorEncryptionKeyValue;
+
+        auto const fromSleOpt = entryFromSle.getLoanAuditorEncryptionKey();
+        auto const fromBuilderOpt = entryFromBuilder.getLoanAuditorEncryptionKey();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfLoanAuditorEncryptionKey");
+        expectEqualField(expected, *fromBuilderOpt, "sfLoanAuditorEncryptionKey");
+    }
+
+    {
+        auto const& expected = borrowerEncryptedPrincipalValue;
+
+        auto const fromSleOpt = entryFromSle.getBorrowerEncryptedPrincipal();
+        auto const fromBuilderOpt = entryFromBuilder.getBorrowerEncryptedPrincipal();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfBorrowerEncryptedPrincipal");
+        expectEqualField(expected, *fromBuilderOpt, "sfBorrowerEncryptedPrincipal");
+    }
+
+    {
+        auto const& expected = brokerEncryptedPrincipalValue;
+
+        auto const fromSleOpt = entryFromSle.getBrokerEncryptedPrincipal();
+        auto const fromBuilderOpt = entryFromBuilder.getBrokerEncryptedPrincipal();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfBrokerEncryptedPrincipal");
+        expectEqualField(expected, *fromBuilderOpt, "sfBrokerEncryptedPrincipal");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPrincipalValue;
+
+        auto const fromSleOpt = entryFromSle.getLoanAuditorEncryptedPrincipal();
+        auto const fromBuilderOpt = entryFromBuilder.getLoanAuditorEncryptedPrincipal();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfLoanAuditorEncryptedPrincipal");
+        expectEqualField(expected, *fromBuilderOpt, "sfLoanAuditorEncryptedPrincipal");
+    }
+
+    {
+        auto const& expected = borrowerEncryptedAmountOwedValue;
+
+        auto const fromSleOpt = entryFromSle.getBorrowerEncryptedAmountOwed();
+        auto const fromBuilderOpt = entryFromBuilder.getBorrowerEncryptedAmountOwed();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfBorrowerEncryptedAmountOwed");
+        expectEqualField(expected, *fromBuilderOpt, "sfBorrowerEncryptedAmountOwed");
+    }
+
+    {
+        auto const& expected = brokerEncryptedAmountOwedValue;
+
+        auto const fromSleOpt = entryFromSle.getBrokerEncryptedAmountOwed();
+        auto const fromBuilderOpt = entryFromBuilder.getBrokerEncryptedAmountOwed();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfBrokerEncryptedAmountOwed");
+        expectEqualField(expected, *fromBuilderOpt, "sfBrokerEncryptedAmountOwed");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedAmountOwedValue;
+
+        auto const fromSleOpt = entryFromSle.getLoanAuditorEncryptedAmountOwed();
+        auto const fromBuilderOpt = entryFromBuilder.getLoanAuditorEncryptedAmountOwed();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfLoanAuditorEncryptedAmountOwed");
+        expectEqualField(expected, *fromBuilderOpt, "sfLoanAuditorEncryptedAmountOwed");
+    }
+
+    {
+        auto const& expected = borrowerEncryptedPeriodicPaymentValue;
+
+        auto const fromSleOpt = entryFromSle.getBorrowerEncryptedPeriodicPayment();
+        auto const fromBuilderOpt = entryFromBuilder.getBorrowerEncryptedPeriodicPayment();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfBorrowerEncryptedPeriodicPayment");
+        expectEqualField(expected, *fromBuilderOpt, "sfBorrowerEncryptedPeriodicPayment");
+    }
+
+    {
+        auto const& expected = brokerEncryptedPeriodicPaymentValue;
+
+        auto const fromSleOpt = entryFromSle.getBrokerEncryptedPeriodicPayment();
+        auto const fromBuilderOpt = entryFromBuilder.getBrokerEncryptedPeriodicPayment();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfBrokerEncryptedPeriodicPayment");
+        expectEqualField(expected, *fromBuilderOpt, "sfBrokerEncryptedPeriodicPayment");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPeriodicPaymentValue;
+
+        auto const fromSleOpt = entryFromSle.getLoanAuditorEncryptedPeriodicPayment();
+        auto const fromBuilderOpt = entryFromBuilder.getLoanAuditorEncryptedPeriodicPayment();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfLoanAuditorEncryptedPeriodicPayment");
+        expectEqualField(expected, *fromBuilderOpt, "sfLoanAuditorEncryptedPeriodicPayment");
+    }
+
+    {
+        auto const& expected = confidentialLoanVersionValue;
+
+        auto const fromSleOpt = entryFromSle.getConfidentialLoanVersion();
+        auto const fromBuilderOpt = entryFromBuilder.getConfidentialLoanVersion();
+
+        ASSERT_TRUE(fromSleOpt.has_value());
+        ASSERT_TRUE(fromBuilderOpt.has_value());
+
+        expectEqualField(expected, *fromSleOpt, "sfConfidentialLoanVersion");
+        expectEqualField(expected, *fromBuilderOpt, "sfConfidentialLoanVersion");
+    }
+
     EXPECT_EQ(entryFromSle.getKey(), index);
     EXPECT_EQ(entryFromBuilder.getKey(), index);
 }
@@ -791,5 +1066,27 @@ TEST(LoanTests, OptionalFieldsReturnNullopt)
     EXPECT_FALSE(entry.getManagementFeeOutstanding().has_value());
     EXPECT_FALSE(entry.hasLoanScale());
     EXPECT_FALSE(entry.getLoanScale().has_value());
+    EXPECT_FALSE(entry.hasLoanAuditorEncryptionKey());
+    EXPECT_FALSE(entry.getLoanAuditorEncryptionKey().has_value());
+    EXPECT_FALSE(entry.hasBorrowerEncryptedPrincipal());
+    EXPECT_FALSE(entry.getBorrowerEncryptedPrincipal().has_value());
+    EXPECT_FALSE(entry.hasBrokerEncryptedPrincipal());
+    EXPECT_FALSE(entry.getBrokerEncryptedPrincipal().has_value());
+    EXPECT_FALSE(entry.hasLoanAuditorEncryptedPrincipal());
+    EXPECT_FALSE(entry.getLoanAuditorEncryptedPrincipal().has_value());
+    EXPECT_FALSE(entry.hasBorrowerEncryptedAmountOwed());
+    EXPECT_FALSE(entry.getBorrowerEncryptedAmountOwed().has_value());
+    EXPECT_FALSE(entry.hasBrokerEncryptedAmountOwed());
+    EXPECT_FALSE(entry.getBrokerEncryptedAmountOwed().has_value());
+    EXPECT_FALSE(entry.hasLoanAuditorEncryptedAmountOwed());
+    EXPECT_FALSE(entry.getLoanAuditorEncryptedAmountOwed().has_value());
+    EXPECT_FALSE(entry.hasBorrowerEncryptedPeriodicPayment());
+    EXPECT_FALSE(entry.getBorrowerEncryptedPeriodicPayment().has_value());
+    EXPECT_FALSE(entry.hasBrokerEncryptedPeriodicPayment());
+    EXPECT_FALSE(entry.getBrokerEncryptedPeriodicPayment().has_value());
+    EXPECT_FALSE(entry.hasLoanAuditorEncryptedPeriodicPayment());
+    EXPECT_FALSE(entry.getLoanAuditorEncryptedPeriodicPayment().has_value());
+    EXPECT_FALSE(entry.hasConfidentialLoanVersion());
+    EXPECT_FALSE(entry.getConfidentialLoanVersion().has_value());
 }
 }

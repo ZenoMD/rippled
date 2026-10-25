@@ -865,7 +865,9 @@ TRANSACTION(ttLOAN_BROKER_COVER_CLAWBACK, 78, LoanBrokerCoverClawback,
 TRANSACTION(ttLOAN_SET, 80, LoanSet,
     ({
         .amendment = featureLendingProtocol,
-        .privileges = Privilege::MayAuthorizeMpt | Privilege::MustModifyVault,
+        // A confidential LoanSet does not touch the Vault; LoanSet's own
+        // invariants require a public LoanSet to modify it.
+        .privileges = Privilege::MayAuthorizeMpt | Privilege::MayModifyVault,
     }),
     ({
     {sfLoanBrokerID, SoeRequired},
@@ -881,10 +883,29 @@ TRANSACTION(ttLOAN_SET, 80, LoanSet,
     {sfLateInterestRate, SoeOptional},
     {sfCloseInterestRate, SoeOptional},
     {sfOverpaymentInterestRate, SoeOptional},
-    {sfPrincipalRequested, SoeRequired},
+    // Required for a public Loan, absent for a confidential one.
+    {sfPrincipalRequested, SoeOptional},
     {sfPaymentTotal, SoeOptional},
     {sfPaymentInterval, SoeOptional},
     {sfGracePeriod, SoeOptional},
+    // Confidential Loans only.
+    {sfSenderEncryptedAmount, SoeOptional},
+    {sfDestinationEncryptedAmount, SoeOptional},
+    {sfIssuerEncryptedAmount, SoeOptional},
+    {sfAuditorEncryptedAmount, SoeOptional},
+    {sfBalanceCommitment, SoeOptional},
+    {sfAmountCommitment, SoeOptional},
+    {sfZKProof, SoeOptional},
+    {sfLoanAuditorEncryptionKey, SoeOptional},
+    {sfLoanAuditorEncryptedPrincipal, SoeOptional},
+    {sfBorrowerEncryptedAmountOwed, SoeOptional},
+    {sfBrokerEncryptedAmountOwed, SoeOptional},
+    {sfLoanAuditorEncryptedAmountOwed, SoeOptional},
+    {sfBorrowerEncryptedPeriodicPayment, SoeOptional},
+    {sfBrokerEncryptedPeriodicPayment, SoeOptional},
+    {sfLoanAuditorEncryptedPeriodicPayment, SoeOptional},
+    {sfAmountOwedCommitment, SoeOptional},
+    {sfPeriodicPaymentCommitment, SoeOptional},
 }))
 
 /** This transaction deletes an existing Loan */
@@ -959,6 +980,50 @@ TRANSACTION(ttLOAN_BROKER_MERGE_INBOX, 98, LoanBrokerMergeInbox,
     }),
     ({
     {sfLoanBrokerID, SoeRequired},
+}))
+
+/** This transaction returns funds from a confidential Loan Broker's Lending
+    Balance to its Vault */
+#if TRANSACTION_INCLUDE
+#   include <xrpl/tx/transactors/lending/LoanBrokerSettle.h>
+#endif
+TRANSACTION(ttLOAN_BROKER_SETTLE, 83, LoanBrokerSettle,
+    ({
+        .amendment = featureConfidentialLendingProtocol,
+        .privileges = Privilege::MustModifyVault,
+    }),
+    ({
+    {sfLoanBrokerID, SoeRequired},
+    {sfAmount, SoeRequired, SoeMptSupported},
+    {sfHolderEncryptedAmount, SoeRequired},
+    {sfIssuerEncryptedAmount, SoeRequired},
+    {sfAuditorEncryptedAmount, SoeRequired},
+    {sfBlindingFactor, SoeRequired},
+    {sfBalanceCommitment, SoeRequired},
+    {sfZKProof, SoeRequired},
+}))
+
+/** The Borrower uses this transaction to make a payment on a confidential
+    Loan */
+#if TRANSACTION_INCLUDE
+#   include <xrpl/tx/transactors/lending/ConfidentialLoanPay.h>
+#endif
+TRANSACTION(ttCONFIDENTIAL_LOAN_PAY, 99, ConfidentialLoanPay,
+    ({
+        .amendment = featureConfidentialLendingProtocol,
+    }),
+    ({
+    {sfLoanID, SoeRequired},
+    {sfSenderEncryptedAmount, SoeRequired},
+    {sfDestinationEncryptedAmount, SoeRequired},
+    {sfIssuerEncryptedAmount, SoeRequired},
+    {sfAuditorEncryptedAmount, SoeRequired},
+    {sfLoanAuditorEncryptedAmount, SoeRequired},
+    {sfBalanceCommitment, SoeRequired},
+    {sfAmountCommitment, SoeRequired},
+    {sfAmountOwedCommitment, SoeOptional},
+    {sfPeriodicPaymentCommitment, SoeOptional},
+    {sfZKProof, SoeRequired},
 }))
 
 /** This transaction type converts into confidential MPT balance. */

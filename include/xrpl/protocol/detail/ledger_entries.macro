@@ -593,6 +593,18 @@ LEDGER_ENTRY(ltLOAN, 0x0089, Loan, loan, ({
     // number of digits after the decimal point (excluding
     // trailing zeros).
     {sfLoanScale,                SoeDefault},
+    // Confidential Loans only (lsfLoanConfidential): the encrypted terms.
+    {sfLoanAuditorEncryptionKey,            SoeOptional},
+    {sfBorrowerEncryptedPrincipal,          SoeOptional},
+    {sfBrokerEncryptedPrincipal,            SoeOptional},
+    {sfLoanAuditorEncryptedPrincipal,       SoeOptional},
+    {sfBorrowerEncryptedAmountOwed,         SoeOptional},
+    {sfBrokerEncryptedAmountOwed,           SoeOptional},
+    {sfLoanAuditorEncryptedAmountOwed,      SoeOptional},
+    {sfBorrowerEncryptedPeriodicPayment,    SoeOptional},
+    {sfBrokerEncryptedPeriodicPayment,      SoeOptional},
+    {sfLoanAuditorEncryptedPeriodicPayment, SoeOptional},
+    {sfConfidentialLoanVersion,             SoeOptional},
 }))
 
 /** A ledger object representing a sponsorship.

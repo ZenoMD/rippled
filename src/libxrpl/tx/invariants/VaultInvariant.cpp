@@ -1489,7 +1489,8 @@ ValidVault::finalize(
             case ttLOAN_PAY:
                 return true;
             case ttLOAN_BROKER_DRAW:
-                // Checked by LoanBrokerDraw::finalizeInvariants
+            case ttLOAN_BROKER_SETTLE:
+                // Checked by LoanBrokerDraw/Settle::finalizeInvariants
                 return true;
 
             default:

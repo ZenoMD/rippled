@@ -24,6 +24,7 @@
 #include <secp256k1.h>
 #include <secp256k1_mpt.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -650,6 +651,240 @@ verifyConvertBackProof(
     }
 
     return tesSUCCESS;
+}
+
+
+//------------------------------------------------------------------------------
+// Confidential lending
+
+namespace {
+
+void
+addContextPrefix(
+    Serializer& s,
+    TxType txType,
+    AccountID const& account,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence)
+{
+    // Matches mpt_add_common_zkp_fields in mpt-crypto.
+    s.add16(txType);
+    s.addBitString(account);
+    s.addBitString(issuanceID);
+    s.add32(sequence);
+}
+
+std::optional<secp256k1_pubkey>
+parsePoint(Slice const& slice)
+{
+    secp256k1_pubkey point;
+    if (slice.size() != kEcPubKeyLength ||
+        secp256k1_ec_pubkey_parse(secp256k1Context(), &point, slice.data(), slice.size()) != 1)
+        return std::nullopt;
+    return point;
+}
+
+}  // namespace
+
+UInt256
+getLoanSetContextHash(
+    AccountID const& brokerPseudo,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence,
+    AccountID const& borrower,
+    std::uint32_t lendingBalanceVersion)
+{
+    Serializer s;
+    addContextPrefix(s, ttLOAN_SET, brokerPseudo, issuanceID, sequence);
+    s.addBitString(borrower);
+    s.add32(lendingBalanceVersion);
+    return s.getSHA512Half();
+}
+
+UInt256
+getConfidentialLoanPayContextHash(
+    AccountID const& borrower,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence,
+    AccountID const& brokerPseudo,
+    std::uint32_t borrowerVersion,
+    UInt256 const& loanID,
+    std::uint32_t loanVersion)
+{
+    Serializer s;
+    addContextPrefix(s, ttCONFIDENTIAL_LOAN_PAY, borrower, issuanceID, sequence);
+    s.addBitString(brokerPseudo);
+    s.add32(borrowerVersion);
+    s.addBitString(loanID);
+    s.add32(loanVersion);
+    return s.getSHA512Half();
+}
+
+UInt256
+getLoanBrokerSettleContextHash(
+    AccountID const& brokerPseudo,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence,
+    std::uint32_t lendingBalanceVersion)
+{
+    Serializer s;
+    addContextPrefix(s, ttLOAN_BROKER_SETTLE, brokerPseudo, issuanceID, sequence);
+    s.addBitString(brokerPseudo);
+    s.add32(lendingBalanceVersion);
+    return s.getSHA512Half();
+}
+
+TER
+verifyCompactSigmaProof(
+    Slice const& proof,
+    std::vector<ConfidentialRecipient> const& recipients,
+    Slice const& commitment,
+    Slice const& balanceKey,
+    Slice const& balanceCiphertext,
+    Slice const& balanceCommitment,
+    UInt256 const& contextHash)
+{
+    if (proof.size() != kEcSendSigmaProofLength || recipients.empty() ||
+        balanceCiphertext.size() != kEcGamalEncryptedTotalLength)
+        return tecBAD_PROOF;
+
+    Slice const c1Bytes{recipients.front().encryptedAmount.data(), kEcCiphertextComponentLength};
+    std::vector<secp256k1_pubkey> c2(recipients.size());
+    std::vector<secp256k1_pubkey> keys(recipients.size());
+    for (std::size_t i = 0; i < recipients.size(); ++i)
+    {
+        auto const& r = recipients[i];
+        if (r.encryptedAmount.size() != kEcGamalEncryptedTotalLength ||
+            std::memcmp(r.encryptedAmount.data(), c1Bytes.data(), c1Bytes.size()) != 0)
+            return tecBAD_PROOF;
+        auto const pair = makeEcPair(r.encryptedAmount);
+        auto const key = parsePoint(r.publicKey);
+        if (!pair || !key)
+            return tecBAD_PROOF;
+        c2[i] = pair->c2;
+        keys[i] = *key;
+    }
+
+    auto const c1 = makeEcPair(recipients.front().encryptedAmount);
+    auto const pcM = parsePoint(commitment);
+    auto const pkA = parsePoint(balanceKey);
+    auto const pcB = parsePoint(balanceCommitment);
+    auto const balance = makeEcPair(balanceCiphertext);
+    if (!c1 || !pcM || !pkA || !pcB || !balance)
+        return tecBAD_PROOF;
+
+    if (secp256k1_compact_standard_verify(
+            secp256k1Context(),
+            proof.data(),
+            recipients.size(),
+            &c1->c1,
+            c2.data(),
+            keys.data(),
+            &*pcM,
+            &*pkA,
+            &*pcB,
+            &balance->c1,
+            &balance->c2,
+            contextHash.data()) != 1)
+        return tecBAD_PROOF;
+
+    return tesSUCCESS;
+}
+
+TER
+verifyCommitmentLinkProof(
+    Slice const& proof,
+    Slice const& pubKey,
+    Slice const& ciphertext,
+    Slice const& commitment,
+    UInt256 const& contextHash)
+{
+    if (proof.size() != kEcConvertBackSigmaProofLength ||
+        ciphertext.size() != kEcGamalEncryptedTotalLength)
+        return tecBAD_PROOF;
+
+    auto const pk = parsePoint(pubKey);
+    auto const pc = parsePoint(commitment);
+    auto const pair = makeEcPair(ciphertext);
+    if (!pk || !pc || !pair)
+        return tecBAD_PROOF;
+
+    if (secp256k1_compact_convertback_verify(
+            secp256k1Context(),
+            proof.data(),
+            &*pk,
+            &pair->c1,
+            &pair->c2,
+            &*pc,
+            contextHash.data()) != 1)
+        return tecBAD_PROOF;
+
+    return tesSUCCESS;
+}
+
+TER
+verifyRangeProof(
+    Slice const& proof,
+    std::vector<Buffer> const& commitments,
+    UInt256 const& contextHash)
+{
+    std::vector<std::uint8_t const*> pointers;
+    pointers.reserve(commitments.size());
+    for (auto const& c : commitments)
+    {
+        if (c.size() != kEcPedersenCommitmentLength)
+            return tecBAD_PROOF;
+        pointers.push_back(c.data());
+    }
+
+    if (mpt_verify_aggregated_bulletproof(
+            proof.data(), proof.size(), pointers.data(), pointers.size(), contextHash.data()) != 0)
+        return tecBAD_PROOF;
+
+    return tesSUCCESS;
+}
+
+std::optional<Buffer>
+combinePoints(Slice const& a, std::int64_t aMultiplier, Slice const& b, std::int64_t bMultiplier)
+{
+    auto const scale = [](Slice const& slice,
+                          std::int64_t multiplier) -> std::optional<secp256k1_pubkey> {
+        auto point = parsePoint(slice);
+        if (!point || multiplier == 0)
+            return std::nullopt;
+        if (multiplier < 0)
+        {
+            if (secp256k1_ec_pubkey_negate(secp256k1Context(), &*point) != 1)
+                return std::nullopt;
+            multiplier = -multiplier;
+        }
+        if (multiplier != 1)
+        {
+            std::array<std::uint8_t, 32> scalar{};
+            for (int i = 0; i < 8; ++i)
+                scalar[31 - i] = static_cast<std::uint8_t>(multiplier >> (8 * i));
+            if (secp256k1_ec_pubkey_tweak_mul(secp256k1Context(), &*point, scalar.data()) != 1)
+                return std::nullopt;
+        }
+        return point;
+    };
+
+    auto const pa = scale(a, aMultiplier);
+    auto const pb = scale(b, bMultiplier);
+    if (!pa || !pb)
+        return std::nullopt;
+
+    secp256k1_pubkey sum;
+    secp256k1_pubkey const* summands[2] = {&*pa, &*pb};
+    if (secp256k1_ec_pubkey_combine(secp256k1Context(), &sum, summands, 2) != 1)
+        return std::nullopt;  // the point at infinity
+
+    Buffer out(kEcPubKeyLength);
+    std::size_t outLen = kEcPubKeyLength;
+    if (secp256k1_ec_pubkey_serialize(
+            secp256k1Context(), out.data(), &outLen, &sum, SECP256K1_EC_COMPRESSED) != 1)
+        return std::nullopt;
+    return out;
 }
 
 }  // namespace xrpl

@@ -11,6 +11,7 @@
 #include <xrpl/ledger/View.h>
 #include <xrpl/ledger/helpers/VaultHelpers.h>
 #include <xrpl/protocol/Asset.h>
+#include <xrpl/protocol/ConfidentialTransfer.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/LedgerFormats.h>
@@ -31,6 +32,7 @@
 #include <expected>
 #include <optional>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace xrpl {
@@ -241,6 +243,53 @@ checkConfidentialLendingDependencies(Rules const& rules)
 {
     return rules.enabled(featureConfidentialLendingProtocol) &&
         rules.enabled(featureLendingProtocolV1_1) && rules.enabled(featureConfidentialTransfer);
+}
+
+TER
+moveConfidentialAmount(
+    ApplyView& view,
+    SLE::ConstRef issuance,
+    SLE::Ref sender,
+    SLE::Ref destination,
+    Slice const& senderAmount,
+    Slice const& destinationAmount,
+    Slice const& issuerAmount,
+    Slice const& auditorAmount,
+    Slice const& randomness)
+{
+    // Debit the sender as submitted
+    for (auto const& [field, amount] :
+         {std::pair{&sfConfidentialBalanceSpending, senderAmount},
+          std::pair{&sfIssuerEncryptedBalance, issuerAmount},
+          std::pair{&sfAuditorEncryptedBalance, auditorAmount}})
+    {
+        auto result = homomorphicSubtract((*sender)[*field], amount);
+        if (!result)
+            return tecINTERNAL;  // LCOV_EXCL_LINE
+        (*sender)[*field] = std::move(*result);
+    }
+
+    // Credit the destination with re-randomized ciphertexts
+    Slice const destinationKey = (*destination)[sfHolderEncryptionKey];
+    for (auto const& [field, amount, key] :
+         {std::tuple{&sfConfidentialBalanceInbox, destinationAmount, destinationKey},
+          std::tuple{&sfIssuerEncryptedBalance, issuerAmount, (*issuance)[sfIssuerEncryptionKey]},
+          std::tuple{
+              &sfAuditorEncryptedBalance, auditorAmount, (*issuance)[sfAuditorEncryptionKey]}})
+    {
+        auto const rerandomized = rerandomizeCiphertext(amount, key, randomness);
+        if (!rerandomized)
+            return tecINTERNAL;  // LCOV_EXCL_LINE
+        auto result = homomorphicAdd((*destination)[*field], *rerandomized);
+        if (!result)
+            return tecINTERNAL;  // LCOV_EXCL_LINE
+        (*destination)[*field] = std::move(*result);
+    }
+
+    incrementConfidentialVersion(*sender);
+    view.update(sender);
+    view.update(destination);
+    return tesSUCCESS;
 }
 
 std::optional<LoanDefaultFreezeExemptAccounts>

@@ -111,8 +111,10 @@ LoanDelete::doApply()
     adjustLoanBrokerOwnerCount(view, brokerSle, -1, j_);
 
     // If there are no loans left, then any remaining debt must be forgiven,
-    // because there is no other way to pay it back.
-    if (brokerSle->at(sfOwnerCount) == 0)
+    // because there is no other way to pay it back. A confidential
+    // LoanBroker's DebtTotal is what the Lending Balance owes the Vault, which
+    // LoanBrokerSettle still repays (spec §14).
+    if (brokerSle->at(sfOwnerCount) == 0 && !brokerSle->isFlag(lsfLoanBrokerConfidential))
     {
         auto debtTotalProxy = brokerSle->at(sfDebtTotal);
         if (*debtTotalProxy != beast::kZero)

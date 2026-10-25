@@ -105,9 +105,13 @@ ValidLoan::finalize(
                                "remaining has not been paid off";
             return false;
         }
+        // A confidential Loan's amounts are encrypted, so its public amount
+        // fields are always 0 (spec §5.3).
+        bool const confidential = after->isFlag(lsfLoanConfidential);
+
         // If `Loan.PaymentRemaining != 0` then the loan MUST NOT be fully paid
         // off
-        if (after->at(sfPaymentRemaining) != 0 &&
+        if (!confidential && after->at(sfPaymentRemaining) != 0 &&
             after->at(sfTotalValueOutstanding) == beast::kZero &&
             after->at(sfPrincipalOutstanding) == beast::kZero &&
             after->at(sfManagementFeeOutstanding) == beast::kZero)
@@ -145,7 +149,7 @@ ValidLoan::finalize(
                  &sfPeriodicPayment,
              })
         {
-            if (after->at(*field) <= 0)
+            if (!confidential && after->at(*field) <= 0)
             {
                 JLOG(j.fatal()) << "Invariant failed: " << field->getName()
                                 << " is zero or negative ";

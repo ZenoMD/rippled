@@ -562,6 +562,270 @@ public:
     {
         return this->sle_->isFieldPresent(sfLoanScale);
     }
+
+    /**
+     * @brief Get sfLoanAuditorEncryptionKey (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getLoanAuditorEncryptionKey() const
+    {
+        if (hasLoanAuditorEncryptionKey())
+            return this->sle_->at(sfLoanAuditorEncryptionKey);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfLoanAuditorEncryptionKey is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasLoanAuditorEncryptionKey() const
+    {
+        return this->sle_->isFieldPresent(sfLoanAuditorEncryptionKey);
+    }
+
+    /**
+     * @brief Get sfBorrowerEncryptedPrincipal (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getBorrowerEncryptedPrincipal() const
+    {
+        if (hasBorrowerEncryptedPrincipal())
+            return this->sle_->at(sfBorrowerEncryptedPrincipal);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfBorrowerEncryptedPrincipal is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasBorrowerEncryptedPrincipal() const
+    {
+        return this->sle_->isFieldPresent(sfBorrowerEncryptedPrincipal);
+    }
+
+    /**
+     * @brief Get sfBrokerEncryptedPrincipal (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getBrokerEncryptedPrincipal() const
+    {
+        if (hasBrokerEncryptedPrincipal())
+            return this->sle_->at(sfBrokerEncryptedPrincipal);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfBrokerEncryptedPrincipal is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasBrokerEncryptedPrincipal() const
+    {
+        return this->sle_->isFieldPresent(sfBrokerEncryptedPrincipal);
+    }
+
+    /**
+     * @brief Get sfLoanAuditorEncryptedPrincipal (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getLoanAuditorEncryptedPrincipal() const
+    {
+        if (hasLoanAuditorEncryptedPrincipal())
+            return this->sle_->at(sfLoanAuditorEncryptedPrincipal);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfLoanAuditorEncryptedPrincipal is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasLoanAuditorEncryptedPrincipal() const
+    {
+        return this->sle_->isFieldPresent(sfLoanAuditorEncryptedPrincipal);
+    }
+
+    /**
+     * @brief Get sfBorrowerEncryptedAmountOwed (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getBorrowerEncryptedAmountOwed() const
+    {
+        if (hasBorrowerEncryptedAmountOwed())
+            return this->sle_->at(sfBorrowerEncryptedAmountOwed);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfBorrowerEncryptedAmountOwed is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasBorrowerEncryptedAmountOwed() const
+    {
+        return this->sle_->isFieldPresent(sfBorrowerEncryptedAmountOwed);
+    }
+
+    /**
+     * @brief Get sfBrokerEncryptedAmountOwed (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getBrokerEncryptedAmountOwed() const
+    {
+        if (hasBrokerEncryptedAmountOwed())
+            return this->sle_->at(sfBrokerEncryptedAmountOwed);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfBrokerEncryptedAmountOwed is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasBrokerEncryptedAmountOwed() const
+    {
+        return this->sle_->isFieldPresent(sfBrokerEncryptedAmountOwed);
+    }
+
+    /**
+     * @brief Get sfLoanAuditorEncryptedAmountOwed (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getLoanAuditorEncryptedAmountOwed() const
+    {
+        if (hasLoanAuditorEncryptedAmountOwed())
+            return this->sle_->at(sfLoanAuditorEncryptedAmountOwed);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfLoanAuditorEncryptedAmountOwed is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasLoanAuditorEncryptedAmountOwed() const
+    {
+        return this->sle_->isFieldPresent(sfLoanAuditorEncryptedAmountOwed);
+    }
+
+    /**
+     * @brief Get sfBorrowerEncryptedPeriodicPayment (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getBorrowerEncryptedPeriodicPayment() const
+    {
+        if (hasBorrowerEncryptedPeriodicPayment())
+            return this->sle_->at(sfBorrowerEncryptedPeriodicPayment);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfBorrowerEncryptedPeriodicPayment is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasBorrowerEncryptedPeriodicPayment() const
+    {
+        return this->sle_->isFieldPresent(sfBorrowerEncryptedPeriodicPayment);
+    }
+
+    /**
+     * @brief Get sfBrokerEncryptedPeriodicPayment (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getBrokerEncryptedPeriodicPayment() const
+    {
+        if (hasBrokerEncryptedPeriodicPayment())
+            return this->sle_->at(sfBrokerEncryptedPeriodicPayment);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfBrokerEncryptedPeriodicPayment is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasBrokerEncryptedPeriodicPayment() const
+    {
+        return this->sle_->isFieldPresent(sfBrokerEncryptedPeriodicPayment);
+    }
+
+    /**
+     * @brief Get sfLoanAuditorEncryptedPeriodicPayment (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getLoanAuditorEncryptedPeriodicPayment() const
+    {
+        if (hasLoanAuditorEncryptedPeriodicPayment())
+            return this->sle_->at(sfLoanAuditorEncryptedPeriodicPayment);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfLoanAuditorEncryptedPeriodicPayment is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasLoanAuditorEncryptedPeriodicPayment() const
+    {
+        return this->sle_->isFieldPresent(sfLoanAuditorEncryptedPeriodicPayment);
+    }
+
+    /**
+     * @brief Get sfConfidentialLoanVersion (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_UINT32::type::value_type>
+    getConfidentialLoanVersion() const
+    {
+        if (hasConfidentialLoanVersion())
+            return this->sle_->at(sfConfidentialLoanVersion);
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfConfidentialLoanVersion is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasConfidentialLoanVersion() const
+    {
+        return this->sle_->isFieldPresent(sfConfidentialLoanVersion);
+    }
 };
 
 /**
@@ -914,6 +1178,127 @@ public:
     setLoanScale(std::decay_t<typename SF_INT32::type::value_type> const& value)
     {
         object_[sfLoanScale] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfLoanAuditorEncryptionKey (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setLoanAuditorEncryptionKey(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfLoanAuditorEncryptionKey] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfBorrowerEncryptedPrincipal (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setBorrowerEncryptedPrincipal(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfBorrowerEncryptedPrincipal] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfBrokerEncryptedPrincipal (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setBrokerEncryptedPrincipal(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfBrokerEncryptedPrincipal] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfLoanAuditorEncryptedPrincipal (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setLoanAuditorEncryptedPrincipal(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfLoanAuditorEncryptedPrincipal] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfBorrowerEncryptedAmountOwed (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setBorrowerEncryptedAmountOwed(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfBorrowerEncryptedAmountOwed] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfBrokerEncryptedAmountOwed (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setBrokerEncryptedAmountOwed(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfBrokerEncryptedAmountOwed] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfLoanAuditorEncryptedAmountOwed (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setLoanAuditorEncryptedAmountOwed(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfLoanAuditorEncryptedAmountOwed] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfBorrowerEncryptedPeriodicPayment (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setBorrowerEncryptedPeriodicPayment(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfBorrowerEncryptedPeriodicPayment] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfBrokerEncryptedPeriodicPayment (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setBrokerEncryptedPeriodicPayment(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfBrokerEncryptedPeriodicPayment] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfLoanAuditorEncryptedPeriodicPayment (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setLoanAuditorEncryptedPeriodicPayment(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfLoanAuditorEncryptedPeriodicPayment] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfConfidentialLoanVersion (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBuilder&
+    setConfidentialLoanVersion(std::decay_t<typename SF_UINT32::type::value_type> const& value)
+    {
+        object_[sfConfidentialLoanVersion] = value;
         return *this;
     }
 

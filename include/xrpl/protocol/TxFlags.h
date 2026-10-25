@@ -227,6 +227,10 @@ inline constexpr FlagValue tfUniversalMask = ~tfUniversal;
         TF_FLAG(tfLoanBrokerConfidential, 0x00020000),                                                                                                         \
         MASK_ADJ(0))                                                                                                                                           \
                                                                                                                                                                \
+    TRANSACTION(ConfidentialLoanPay,                    /* True indicates the payment is the whole Amount Owed and closes the loan. */                         \
+        TF_FLAG2(tfLoanFullPayment, 0x00020000),                                                                                                               \
+        MASK_ADJ(0))                                                                                                                                           \
+                                                                                                                                                               \
     TRANSACTION(SponsorshipSet,                                                                                                                                \
         TF_FLAG(tfSponsorshipSetRequireSignForFee, 0x00010000)                                                                                                 \
         TF_FLAG(tfSponsorshipClearRequireSignForFee, 0x00020000)                                                                                               \

@@ -3,6 +3,7 @@
 #include <test/jtx/TestHelpers.h>
 #include <test/jtx/amount.h>
 #include <test/jtx/mpt.h>
+#include <test/jtx/sig.h>
 #include <test/jtx/ter.h>
 #include <test/jtx/vault.h>
 
@@ -31,12 +32,231 @@
 #include <xrpl/protocol/UintTypes.h>
 #include <xrpl/protocol/jss.h>
 
+#include <utility/mpt_utility.h>
+
+#include <secp256k1.h>
+#include <secp256k1_mpt.h>
+
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace xrpl::test {
+
+namespace {
+
+// Provers for the confidential lending proofs, built from mpt-crypto's
+// low-level functions. On failure they return a zero-filled proof of the right
+// size, so a test can submit it and expect tecBAD_PROOF.
+
+secp256k1_pubkey
+parseKey(Slice const& key)
+{
+    secp256k1_pubkey point;
+    if (secp256k1_ec_pubkey_parse(mpt_secp256k1_context(), &point, key.data(), key.size()) != 1)
+        Throw<std::runtime_error>("invalid point");
+    return point;
+}
+
+std::pair<secp256k1_pubkey, secp256k1_pubkey>
+parseCiphertext(Slice const& ciphertext)
+{
+    std::pair<secp256k1_pubkey, secp256k1_pubkey> pair;
+    if (!mpt_make_ec_pair(ciphertext.data(), &pair.first, &pair.second))
+        Throw<std::runtime_error>("invalid ciphertext");
+    return pair;
+}
+
+Buffer
+scalarSub(Buffer const& a, Buffer const& b)
+{
+    Buffer negated(kEcBlindingFactorLength);
+    secp256k1_mpt_scalar_negate(negated.data(), b.data());
+    Buffer result(kEcBlindingFactorLength);
+    secp256k1_mpt_scalar_add(result.data(), a.data(), negated.data());
+    return result;
+}
+
+Buffer
+scalarMul(Buffer const& a, std::uint64_t n)
+{
+    Buffer scalar(kEcBlindingFactorLength);
+    std::memset(scalar.data(), 0, scalar.size());
+    for (int i = 0; i < 8; ++i)
+        scalar.data()[31 - i] = static_cast<std::uint8_t>(n >> (8 * i));
+    Buffer result(kEcBlindingFactorLength);
+    secp256k1_mpt_scalar_mul(result.data(), a.data(), scalar.data());
+    return result;
+}
+
+// What a sigma proof needs to prove ownership of a confidential balance
+struct BalanceWitness
+{
+    Buffer privKey;
+    Buffer pubKey;
+    std::uint64_t balance;
+    Buffer ciphertext;
+    Buffer rho;
+    Buffer commitment;
+};
+
+// XLS-96 Send sigma proof over any number of recipients sharing randomness r
+Buffer
+sigmaProof(
+    BalanceWitness const& w,
+    std::uint64_t amount,
+    Buffer const& r,
+    std::vector<std::pair<Buffer, Buffer>> const& recipients,
+    Buffer const& commitment,
+    UInt256 const& contextHash)
+{
+    auto const c1 = parseCiphertext(recipients.front().second).first;
+    std::vector<secp256k1_pubkey> c2;
+    std::vector<secp256k1_pubkey> keys;
+    for (auto const& [key, ciphertext] : recipients)
+    {
+        c2.push_back(parseCiphertext(ciphertext).second);
+        keys.push_back(parseKey(key));
+    }
+    auto const pcM = parseKey(commitment);
+    auto const pkA = parseKey(w.pubKey);
+    auto const pcB = parseKey(w.commitment);
+    auto const [b1, b2] = parseCiphertext(w.ciphertext);
+
+    Buffer proof(kEcSendSigmaProofLength);
+    std::memset(proof.data(), 0, proof.size());
+    secp256k1_compact_standard_prove(
+        mpt_secp256k1_context(),
+        proof.data(),
+        amount,
+        w.balance,
+        r.data(),
+        w.privKey.data(),
+        w.rho.data(),
+        recipients.size(),
+        &c1,
+        c2.data(),
+        keys.data(),
+        &pcM,
+        &pkA,
+        &pcB,
+        &b1,
+        &b2,
+        contextHash.data());
+    return proof;
+}
+
+// XLS-96 ConvertBack sigma proof: commitment commits to the value of
+// ciphertext, which the holder of privKey can decrypt
+Buffer
+linkProof(
+    Buffer const& privKey,
+    Buffer const& pubKey,
+    std::uint64_t value,
+    Buffer const& rho,
+    Slice const& ciphertext,
+    Buffer const& commitment,
+    UInt256 const& contextHash)
+{
+    auto const pk = parseKey(pubKey);
+    auto const pc = parseKey(commitment);
+    auto const [b1, b2] = parseCiphertext(ciphertext);
+    Buffer proof(kEcConvertBackSigmaProofLength);
+    std::memset(proof.data(), 0, proof.size());
+    secp256k1_compact_convertback_prove(
+        mpt_secp256k1_context(),
+        proof.data(),
+        value,
+        privKey.data(),
+        rho.data(),
+        &pk,
+        &b1,
+        &b2,
+        &pc,
+        contextHash.data());
+    return proof;
+}
+
+// Aggregated Bulletproof that each value is in [0, 2^64)
+Buffer
+rangeProof(
+    std::vector<std::uint64_t> const& values,
+    std::vector<Buffer> const& blindings,
+    UInt256 const& contextHash)
+{
+    std::vector<std::uint8_t> flat;
+    for (auto const& b : blindings)
+        flat.insert(flat.end(), b.data(), b.data() + b.size());
+    secp256k1_pubkey h;
+    secp256k1_mpt_get_h_generator(mpt_secp256k1_context(), &h);
+
+    Buffer proof(kEcDoubleBulletproofLength);
+    std::memset(proof.data(), 0, proof.size());
+    std::size_t length = proof.size();
+    secp256k1_bulletproof_prove_agg(
+        mpt_secp256k1_context(),
+        proof.data(),
+        &length,
+        values.data(),
+        flat.data(),
+        values.size(),
+        &h,
+        contextHash.data());
+    return proof;
+}
+
+// XLS-96 Clawback sigma proof with amount 0: ciphertext encrypts 0
+Buffer
+zeroProof(
+    Buffer const& privKey,
+    Buffer const& pubKey,
+    Slice const& ciphertext,
+    UInt256 const& contextHash)
+{
+    auto const pk = parseKey(pubKey);
+    auto const [c1, c2] = parseCiphertext(ciphertext);
+    Buffer proof(kEcClawbackProofLength);
+    std::memset(proof.data(), 0, proof.size());
+    secp256k1_compact_clawback_prove(
+        mpt_secp256k1_context(),
+        proof.data(),
+        0,
+        privKey.data(),
+        &pk,
+        &c1,
+        &c2,
+        contextHash.data());
+    return proof;
+}
+
+Buffer
+concat(std::vector<Buffer> const& parts)
+{
+    std::size_t size = 0;
+    for (auto const& p : parts)
+        size += p.size();
+    Buffer out(size);
+    std::size_t offset = 0;
+    for (auto const& p : parts)
+    {
+        std::memcpy(out.data() + offset, p.data(), p.size());
+        offset += p.size();
+    }
+    return out;
+}
+
+Buffer
+toBuffer(Slice const& s)
+{
+    return Buffer{s.data(), s.size()};
+}
+
+}  // namespace
 
 class ConfidentialLoanBroker_test : public beast::unit_test::Suite
 {
@@ -54,6 +274,10 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
         jtx::Account const auditor{"auditor"};
         // Holds the Broker Key pair; never submits a transaction.
         jtx::Account const brokerKey{"brokerKey"};
+        // Holds a confidential balance and borrows from the broker.
+        jtx::Account const borrower{"borrower"};
+        // Holds the Loan Auditor key pair; never submits a transaction.
+        jtx::Account const loanAuditor{"loanAuditor"};
         jtx::MPTTester mpt;
         Keylet vaultKeylet = keylet::vault(beast::kZero);
 
@@ -63,13 +287,15 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
             std::uint32_t mptFlags = tfMPTCanTransfer | tfMPTCanLock |
                 tfMPTCanHoldConfidentialBalance,
             bool withAuditor = true)
-            : env(env_), mpt(env, issuer, {.holders = {lender}, .auditor = auditor})
+            : env(env_), mpt(env, issuer, {.holders = {lender, borrower}, .auditor = auditor})
         {
             using namespace jtx;
 
             mpt.create({.ownerCount = 1, .flags = mptFlags});
             mpt.authorize({.account = lender});
             mpt.pay(issuer, lender, 10'000);
+            mpt.authorize({.account = borrower});
+            mpt.pay(issuer, borrower, 2'000);
 
             mpt.generateKeyPair(issuer);
             mpt.generateKeyPair(auditor);
@@ -82,6 +308,16 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
                     .auditorPubKey =
                         withAuditor ? mpt.getPubKey(auditor) : std::optional<Buffer>{},
                 });
+
+                // The Borrower holds a confidential spending balance of 2000
+                if (withAuditor)
+                {
+                    mpt.generateKeyPair(borrower);
+                    mpt.generateKeyPair(loanAuditor);
+                    mpt.convert(
+                        {.account = borrower, .amt = 2'000, .holderPubKey = mpt.getPubKey(borrower)});
+                    mpt.mergeInbox({.account = borrower});
+                }
             }
 
             Vault const vault{env};
@@ -189,6 +425,285 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
         vaultField(SF_NUMBER const& field) const
         {
             return env.le(vaultKeylet)->at(field);
+        }
+
+        [[nodiscard]] Buffer
+        pubKey(jtx::Account const& a) const
+        {
+            return *mpt.getPubKey(a);
+        }
+
+        // The witness for a confidential spending balance held under key's
+        // key pair
+        [[nodiscard]] BalanceWitness
+        witness(jtx::Account const& key, SLE const& token) const
+        {
+            auto const spending = toBuffer(token[sfConfidentialBalanceSpending]);
+            auto const balance = mpt.decryptAmount(key, spending).value_or(0);
+            auto rho = generateBlindingFactor();
+            auto commitment = jtx::MPTTester::getPedersenCommitment(balance, rho);
+            return {
+                *mpt.getPrivKey(key),
+                pubKey(key),
+                balance,
+                spending,
+                std::move(rho),
+                std::move(commitment)};
+        }
+
+        struct LoanTerms
+        {
+            std::uint64_t principal;
+            std::uint64_t owed;
+            std::uint64_t periodic;
+            std::uint32_t paymentTotal = 12;
+            std::uint32_t paymentInterval = 600;
+        };
+
+        // A confidential LoanSet submitted by the lender, with the full
+        // spec §11.2 proof. The Borrower must add CounterpartySignature.
+        [[nodiscard]] json::Value
+        loanSet(Keylet const& broker, LoanTerms const& t) const
+        {
+            auto const seq = env.seq(lender);
+            auto const rP = generateBlindingFactor();
+            auto const rO = generateBlindingFactor();
+            auto const rQ = generateBlindingFactor();
+            auto const enc = [this](jtx::Account const& a, std::uint64_t v, Buffer const& r) {
+                return mpt.encryptAmount(a, v, r);
+            };
+
+            auto const senderP = enc(brokerKey, t.principal, rP);
+            auto const destP = enc(borrower, t.principal, rP);
+            auto const issuerP = enc(issuer, t.principal, rP);
+            auto const auditorP = enc(auditor, t.principal, rP);
+            auto const loanAuditorP = enc(loanAuditor, t.principal, rP);
+            auto const borrowerO = enc(borrower, t.owed, rO);
+            auto const brokerO = enc(brokerKey, t.owed, rO);
+            auto const loanAuditorO = enc(loanAuditor, t.owed, rO);
+            auto const borrowerQ = enc(borrower, t.periodic, rQ);
+            auto const brokerQ = enc(brokerKey, t.periodic, rQ);
+            auto const loanAuditorQ = enc(loanAuditor, t.periodic, rQ);
+            auto const pcP = jtx::MPTTester::getPedersenCommitment(t.principal, rP);
+            auto const pcO = jtx::MPTTester::getPedersenCommitment(t.owed, rO);
+            auto const pcQ = jtx::MPTTester::getPedersenCommitment(t.periodic, rQ);
+
+            auto const lendingSle = lending(broker);
+            auto const w = witness(brokerKey, *lendingSle);
+            auto const contextHash = getLoanSetContextHash(
+                pseudo(broker),
+                mpt.issuanceID(),
+                seq,
+                borrower.id(),
+                (*lendingSle)[~sfConfidentialBalanceVersion].value_or(0));
+
+            auto const send = mpt.getConfidentialSendProof(
+                brokerKey,
+                t.principal,
+                {{.publicKey = pubKey(brokerKey), .encryptedAmount = senderP},
+                 {.publicKey = pubKey(borrower), .encryptedAmount = destP},
+                 {.publicKey = pubKey(issuer), .encryptedAmount = issuerP},
+                 {.publicKey = pubKey(auditor), .encryptedAmount = auditorP}},
+                rP,
+                contextHash,
+                {.pedersenCommitment = pcP, .amt = t.principal, .encryptedAmt = senderP, .blindingFactor = rP},
+                {.pedersenCommitment = w.commitment,
+                 .amt = w.balance,
+                 .encryptedAmt = w.ciphertext,
+                 .blindingFactor = w.rho});
+            auto const proof = concat({
+                send.value_or(Buffer(kEcSendProofLength)),
+                sigmaProof(w, t.principal, rP, {{pubKey(loanAuditor), loanAuditorP}}, pcP, contextHash),
+                sigmaProof(
+                    w,
+                    t.owed,
+                    rO,
+                    {{pubKey(borrower), borrowerO},
+                     {pubKey(brokerKey), brokerO},
+                     {pubKey(loanAuditor), loanAuditorO}},
+                    pcO,
+                    contextHash),
+                sigmaProof(
+                    w,
+                    t.periodic,
+                    rQ,
+                    {{pubKey(borrower), borrowerQ},
+                     {pubKey(brokerKey), brokerQ},
+                     {pubKey(loanAuditor), loanAuditorQ}},
+                    pcQ,
+                    contextHash),
+                rangeProof({t.owed, t.periodic}, {rO, rQ}, contextHash),
+                rangeProof(
+                    {t.owed - t.principal, (t.paymentTotal * t.periodic) - t.owed},
+                    {scalarSub(rO, rP), scalarSub(scalarMul(rQ, t.paymentTotal), rO)},
+                    contextHash),
+            });
+
+            json::Value jv;
+            jv[sfTransactionType] = jss::LoanSet;
+            jv[sfAccount] = to_string(lender.id());
+            jv[sfLoanBrokerID] = to_string(broker.key);
+            jv[sfCounterparty] = to_string(borrower.id());
+            jv[sfPaymentTotal] = t.paymentTotal;
+            jv[sfPaymentInterval] = t.paymentInterval;
+            jv[sfSenderEncryptedAmount] = strHex(senderP);
+            jv[sfDestinationEncryptedAmount] = strHex(destP);
+            jv[sfIssuerEncryptedAmount] = strHex(issuerP);
+            jv[sfAuditorEncryptedAmount] = strHex(auditorP);
+            jv[sfBalanceCommitment] = strHex(w.commitment);
+            jv[sfAmountCommitment] = strHex(pcP);
+            jv[sfZKProof] = strHex(proof);
+            jv[sfLoanAuditorEncryptionKey] = strHex(pubKey(loanAuditor));
+            jv[sfLoanAuditorEncryptedPrincipal] = strHex(loanAuditorP);
+            jv[sfBorrowerEncryptedAmountOwed] = strHex(borrowerO);
+            jv[sfBrokerEncryptedAmountOwed] = strHex(brokerO);
+            jv[sfLoanAuditorEncryptedAmountOwed] = strHex(loanAuditorO);
+            jv[sfBorrowerEncryptedPeriodicPayment] = strHex(borrowerQ);
+            jv[sfBrokerEncryptedPeriodicPayment] = strHex(brokerQ);
+            jv[sfLoanAuditorEncryptedPeriodicPayment] = strHex(loanAuditorQ);
+            jv[sfAmountOwedCommitment] = strHex(pcO);
+            jv[sfPeriodicPaymentCommitment] = strHex(pcQ);
+            // Base fee, one counterparty signature and the confidential multiplier
+            jv[jss::Fee] = to_string(env.current()->fees().base * (kConfidentialFeeMultiplier + 2));
+            return jv;
+        }
+
+        // A ConfidentialLoanPay of amt, with the spec §13.3 proof
+        [[nodiscard]] json::Value
+        loanPay(Keylet const& loanKeylet, Keylet const& broker, std::uint64_t amt, bool full) const
+        {
+            auto const seq = env.seq(borrower);
+            auto const r = generateBlindingFactor();
+            auto const enc = [&](jtx::Account const& a) { return mpt.encryptAmount(a, amt, r); };
+            auto const senderX = enc(borrower);
+            auto const destX = enc(brokerKey);
+            auto const issuerX = enc(issuer);
+            auto const auditorX = enc(auditor);
+            auto const loanAuditorX = enc(loanAuditor);
+            auto const pcX = jtx::MPTTester::getPedersenCommitment(amt, r);
+
+            auto const loan = env.le(loanKeylet);
+            auto const token = env.le(keylet::mptoken(mpt.issuanceID(), borrower.id()));
+            auto const w = witness(borrower, *token);
+            auto const contextHash = getConfidentialLoanPayContextHash(
+                borrower.id(),
+                mpt.issuanceID(),
+                seq,
+                pseudo(broker),
+                (*token)[~sfConfidentialBalanceVersion].value_or(0),
+                loanKeylet.key,
+                loan->at(~sfConfidentialLoanVersion).value_or(0));
+
+            auto const send = mpt.getConfidentialSendProof(
+                borrower,
+                amt,
+                {{.publicKey = pubKey(borrower), .encryptedAmount = senderX},
+                 {.publicKey = pubKey(brokerKey), .encryptedAmount = destX},
+                 {.publicKey = pubKey(issuer), .encryptedAmount = issuerX},
+                 {.publicKey = pubKey(auditor), .encryptedAmount = auditorX}},
+                r,
+                contextHash,
+                {.pedersenCommitment = pcX, .amt = amt, .encryptedAmt = senderX, .blindingFactor = r},
+                {.pedersenCommitment = w.commitment,
+                 .amt = w.balance,
+                 .encryptedAmt = w.ciphertext,
+                 .blindingFactor = w.rho});
+            std::vector<Buffer> parts{
+                send.value_or(Buffer(kEcSendProofLength)),
+                sigmaProof(w, amt, r, {{pubKey(loanAuditor), loanAuditorX}}, pcX, contextHash)};
+
+            json::Value jv;
+            auto const owedCt = toBuffer(loan->at(sfBorrowerEncryptedAmountOwed));
+            if (full)
+            {
+                auto const difference = homomorphicSubtract(senderX, owedCt);
+                parts.push_back(zeroProof(
+                    w.privKey,
+                    w.pubKey,
+                    difference ? Slice(*difference) : Slice(owedCt),
+                    contextHash));
+                jv[sfFlags] = tfLoanFullPayment;
+            }
+            else
+            {
+                auto const periodicCt = toBuffer(loan->at(sfBorrowerEncryptedPeriodicPayment));
+                auto const owed = mpt.decryptAmount(borrower, owedCt).value_or(0);
+                auto const periodic = mpt.decryptAmount(borrower, periodicCt).value_or(0);
+                auto const rhoO = generateBlindingFactor();
+                auto const rhoQ = generateBlindingFactor();
+                auto const pcO = jtx::MPTTester::getPedersenCommitment(owed, rhoO);
+                auto const pcQ = jtx::MPTTester::getPedersenCommitment(periodic, rhoQ);
+                parts.push_back(linkProof(w.privKey, w.pubKey, owed, rhoO, owedCt, pcO, contextHash));
+                parts.push_back(
+                    linkProof(w.privKey, w.pubKey, periodic, rhoQ, periodicCt, pcQ, contextHash));
+                parts.push_back(rangeProof(
+                    {amt - periodic, owed - amt}, {scalarSub(r, rhoQ), scalarSub(rhoO, r)}, contextHash));
+                jv[sfAmountOwedCommitment] = strHex(pcO);
+                jv[sfPeriodicPaymentCommitment] = strHex(pcQ);
+            }
+
+            jv[sfTransactionType] = jss::ConfidentialLoanPay;
+            jv[sfAccount] = to_string(borrower.id());
+            jv[sfLoanID] = to_string(loanKeylet.key);
+            jv[sfSenderEncryptedAmount] = strHex(senderX);
+            jv[sfDestinationEncryptedAmount] = strHex(destX);
+            jv[sfIssuerEncryptedAmount] = strHex(issuerX);
+            jv[sfAuditorEncryptedAmount] = strHex(auditorX);
+            jv[sfLoanAuditorEncryptedAmount] = strHex(loanAuditorX);
+            jv[sfBalanceCommitment] = strHex(w.commitment);
+            jv[sfAmountCommitment] = strHex(pcX);
+            jv[sfZKProof] = strHex(concat(parts));
+            jv[jss::Fee] = to_string(env.current()->fees().base * (kConfidentialFeeMultiplier + 1));
+            return jv;
+        }
+
+        // A LoanBrokerSettle of amt, with the XLS-96 ConvertBack proof
+        [[nodiscard]] json::Value
+        settle(Keylet const& broker, std::uint64_t amt) const
+        {
+            auto const seq = env.seq(lender);
+            auto const bf = generateBlindingFactor();
+            auto const lendingSle = lending(broker);
+            auto const w = witness(brokerKey, *lendingSle);
+            auto const contextHash = getLoanBrokerSettleContextHash(
+                pseudo(broker),
+                mpt.issuanceID(),
+                seq,
+                (*lendingSle)[~sfConfidentialBalanceVersion].value_or(0));
+
+            mpt_pedersen_proof_params params{};
+            std::memcpy(params.pedersen_commitment, w.commitment.data(), w.commitment.size());
+            params.amount = w.balance;
+            std::memcpy(params.ciphertext, w.ciphertext.data(), w.ciphertext.size());
+            std::memcpy(params.blinding_factor, w.rho.data(), w.rho.size());
+            Buffer proof(kEcConvertBackProofLength);
+            std::memset(proof.data(), 0, proof.size());
+            mpt_get_convert_back_proof(
+                w.privKey.data(), w.pubKey.data(), contextHash.data(), amt, &params, proof.data());
+
+            json::Value jv;
+            jv[sfTransactionType] = jss::LoanBrokerSettle;
+            jv[sfAccount] = to_string(lender.id());
+            jv[sfLoanBrokerID] = to_string(broker.key);
+            jv[sfAmount] = mpt(amt).value().getJson(JsonOptions::Values::None);
+            jv[sfHolderEncryptedAmount] = strHex(mpt.encryptAmount(brokerKey, amt, bf));
+            jv[sfIssuerEncryptedAmount] = strHex(mpt.encryptAmount(issuer, amt, bf));
+            jv[sfAuditorEncryptedAmount] = strHex(mpt.encryptAmount(auditor, amt, bf));
+            jv[sfBlindingFactor] = strHex(bf);
+            jv[sfBalanceCommitment] = strHex(w.commitment);
+            jv[sfZKProof] = strHex(proof);
+            jv[jss::Fee] = to_string(env.current()->fees().base * (kConfidentialFeeMultiplier + 1));
+            return jv;
+        }
+
+        // Decrypt one of a Loan's encrypted terms with key's secret key
+        [[nodiscard]] std::optional<std::uint64_t>
+        decryptLoan(Keylet const& loan, SF_VL const& field, jtx::Account const& key) const
+        {
+            auto const sle = env.le(loan);
+            if (!sle || !sle->isFieldPresent(field))
+                return std::nullopt;
+            return mpt.decryptAmount(key, toBuffer((*sle)[field]));
         }
     };
 
@@ -422,7 +937,8 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
         BEAST_EXPECT(s.vaultField(sfAssetsTotal) == Number(5'000));
         BEAST_EXPECT(env.le(broker)->at(sfDebtTotal) == Number(1'000));
         BEAST_EXPECT(s.mpt.getBalance(Account("vault", vaultPseudo)) == vaultBalance - 1'000);
-        BEAST_EXPECT(s.mpt.getIssuanceConfidentialBalance() == 1'000);
+        // The Borrower's 2000 plus the 1000 drawn
+        BEAST_EXPECT(s.mpt.getIssuanceConfidentialBalance() == 3'000);
         BEAST_EXPECT(s.mpt.getIssuanceOutstandingBalance() == outstanding);
 
         // Credited to the inbox, not the spending balance
@@ -514,7 +1030,8 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
         BEAST_EXPECT(s.decrypt(broker, sfIssuerEncryptedBalance, s.issuer) == 1'000);
         BEAST_EXPECT(s.decrypt(broker, sfAuditorEncryptedBalance, s.auditor) == 1'000);
         BEAST_EXPECT((*s.lending(broker))[sfConfidentialBalanceVersion] == 1);
-        BEAST_EXPECT(s.mpt.getIssuanceConfidentialBalance() == 1'000);
+        // The Borrower's 2000 plus the 1000 drawn
+        BEAST_EXPECT(s.mpt.getIssuanceConfidentialBalance() == 3'000);
         BEAST_EXPECT(s.mpt.getIssuanceOutstandingBalance() == outstanding);
 
         // The inbox is reset to the canonical encrypted zero
@@ -533,10 +1050,132 @@ class ConfidentialLoanBroker_test : public beast::unit_test::Suite
         env(s.mergeInbox(broker.key), Ter(tecLOCKED));
     }
 
+    void
+    testLoanLifecycle()
+    {
+        testcase("Confidential loan lifecycle");
+        using namespace jtx;
+
+        Env env{*this, all_};
+        Setup s{env};
+        auto const broker = s.createBroker();
+        env(s.draw(broker.key, 1'000));
+        env.close();
+        env(s.mergeInbox(broker.key));
+        env.close();
+
+        Setup::LoanTerms const terms{.principal = 500, .owed = 550, .periodic = 50};
+
+        // A tampered proof does not verify
+        {
+            auto bad = s.loanSet(broker, terms);
+            auto proof = strUnHex(bad[sfZKProof].asString());
+            (*proof)[kEcSendProofLength + 10] ^= 0x01;
+            bad[sfZKProof] = strHex(*proof);
+            env(bad, Sig(sfCounterpartySignature, s.borrower), Ter(tecBAD_PROOF));
+            env.close();
+        }
+
+        // LoanSet: the principal moves from the Lending Balance to the Borrower
+        env(s.loanSet(broker, terms), Sig(sfCounterpartySignature, s.borrower));
+        env.close();
+        auto const loan = keylet::loan(broker.key, SeqProxy::rawSequence(1));
+        auto const sleLoan = env.le(loan);
+        if (!BEAST_EXPECT(sleLoan))
+            return;
+        BEAST_EXPECT(sleLoan->isFlag(lsfLoanConfidential));
+        BEAST_EXPECT(sleLoan->at(sfPaymentRemaining) == 12);
+        BEAST_EXPECT(s.decryptLoan(loan, sfLoanAuditorEncryptedPrincipal, s.loanAuditor) == 500);
+        BEAST_EXPECT(s.decryptLoan(loan, sfBrokerEncryptedPrincipal, s.brokerKey) == 500);
+        BEAST_EXPECT(s.decryptLoan(loan, sfLoanAuditorEncryptedAmountOwed, s.loanAuditor) == 550);
+        BEAST_EXPECT(s.decryptLoan(loan, sfBorrowerEncryptedPeriodicPayment, s.borrower) == 50);
+        BEAST_EXPECT(s.decrypt(broker, sfConfidentialBalanceSpending, s.brokerKey) == 500);
+        BEAST_EXPECT(
+            s.mpt.getDecryptedBalance(s.borrower, MPTTester::holderEncryptedInbox) == 500);
+        BEAST_EXPECT(env.le(broker)->at(sfDebtTotal) == Number(1'000));
+        BEAST_EXPECT(s.vaultField(sfAssetsAvailable) == Number(4'000));
+
+        // A confidential Loan cannot be paid with LoanPay
+        env(loan::pay(s.borrower.id(), loan.key, s.mpt(50)), Ter(tecNO_PERMISSION));
+
+        // A regular payment below the Periodic Payment does not verify
+        env(s.loanPay(loan, broker, 40, false), Ter(tecBAD_PROOF));
+        env.close();
+
+        // A regular overpayment reduces the Amount Owed by the amount paid
+        auto const due = env.le(loan)->at(sfNextPaymentDueDate);
+        env(s.loanPay(loan, broker, 60, false));
+        env.close();
+        BEAST_EXPECT(env.le(loan)->at(sfPaymentRemaining) == 11);
+        BEAST_EXPECT(env.le(loan)->at(sfNextPaymentDueDate) == due + terms.paymentInterval);
+        BEAST_EXPECT(env.le(loan)->at(sfConfidentialLoanVersion) == 1);
+        for (auto const& [field, key] :
+             {std::pair{&sfBorrowerEncryptedAmountOwed, &s.borrower},
+              std::pair{&sfBrokerEncryptedAmountOwed, &s.brokerKey},
+              std::pair{&sfLoanAuditorEncryptedAmountOwed, &s.loanAuditor}})
+            BEAST_EXPECT(s.decryptLoan(loan, *field, *key) == 490);
+        BEAST_EXPECT(s.decrypt(broker, sfConfidentialBalanceInbox, s.brokerKey) == 60);
+
+        // A full payment of the Amount Owed closes the Loan
+        env(s.loanPay(loan, broker, 490, true));
+        env.close();
+        BEAST_EXPECT(env.le(loan)->at(sfPaymentRemaining) == 0);
+        BEAST_EXPECT(env.le(loan)->at(~sfNextPaymentDueDate).value_or(0) == 0);
+        env(s.loanPay(loan, broker, 0, true), Ter(tecKILLED));
+
+        // Settle everything back: DebtTotal is repaid, the rest is yield
+        env(loan::del(s.lender.id(), loan.key));
+        env.close();
+        BEAST_EXPECT(env.le(broker)->at(sfDebtTotal) == Number(1'000));
+        env(s.mergeInbox(broker.key));
+        env.close();
+        BEAST_EXPECT(s.decrypt(broker, sfConfidentialBalanceSpending, s.brokerKey) == 1'050);
+        env(s.settle(broker, 1'051), Ter(tecBAD_PROOF));
+        env(s.settle(broker, 1'050));
+        env.close();
+        BEAST_EXPECT(env.le(broker)->at(sfDebtTotal) == Number(0));
+        BEAST_EXPECT(s.vaultField(sfAssetsAvailable) == Number(5'050));
+        BEAST_EXPECT(s.vaultField(sfAssetsTotal) == Number(5'050));
+        BEAST_EXPECT(s.decrypt(broker, sfConfidentialBalanceSpending, s.brokerKey) == 0);
+    }
+
+    void
+    testLoanDefault()
+    {
+        testcase("Confidential loan default");
+        using namespace jtx;
+
+        Env env{*this, all_};
+        Setup s{env};
+        auto const broker = s.createBroker();
+        env(s.draw(broker.key, 1'000));
+        env.close();
+        env(s.mergeInbox(broker.key));
+        env.close();
+        env(s.loanSet(broker, {.principal = 500, .owed = 550, .periodic = 50}),
+            Sig(sfCounterpartySignature, s.borrower));
+        env.close();
+        auto const loan = keylet::loan(broker.key, SeqProxy::rawSequence(1));
+
+        // Defaulting works as in XLS-66 and leaves the Vault and DebtTotal alone
+        env(loan::manage(s.lender.id(), loan.key, tfLoanDefault), Ter(tecTOO_SOON));
+        auto const due = env.le(loan)->at(sfNextPaymentDueDate) + env.le(loan)->at(sfGracePeriod);
+        env.close(NetClock::time_point{NetClock::duration{due + 1}});
+        env(loan::manage(s.lender.id(), loan.key, tfLoanDefault));
+        env.close();
+        BEAST_EXPECT(env.le(loan)->isFlag(lsfLoanDefault));
+        BEAST_EXPECT(env.le(loan)->at(sfPaymentRemaining) == 0);
+        BEAST_EXPECT(env.le(broker)->at(sfDebtTotal) == Number(1'000));
+        BEAST_EXPECT(s.vaultField(sfAssetsTotal) == Number(5'000));
+        env(s.loanPay(loan, broker, 550, true), Ter(tecKILLED));
+    }
+
 public:
     void
     run() override
     {
+        testLoanLifecycle();
+        testLoanDefault();
         testContextHash();
         testDisabled();
         testBrokerSet();

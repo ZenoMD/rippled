@@ -44,6 +44,8 @@ constexpr auto kConfidentialMptTxTypes = std::to_array<TxType>({
     ttCONFIDENTIAL_MPT_HOLDER_KEY_UPDATE,
     ttLOAN_BROKER_DRAW,
     ttLOAN_BROKER_MERGE_INBOX,
+    ttLOAN_BROKER_SETTLE,
+    ttCONFIDENTIAL_LOAN_PAY,
 });
 
 // Clamp to the cap (== INT64_MAX) before the signed conversion. Invariant

@@ -156,11 +156,10 @@ LoanPay::calculateBaseFee(ReadView const& view, STTx const& tx)
     auto const loanID = tx[sfLoanID];
 
     auto const loanSle = view.read(keylet::loan(loanID));
-    if (!loanSle)
-    {
-        // Let preclaim worry about the error for this
+    // Let preclaim reject a missing or confidential Loan, whose payment amounts
+    // are 0.
+    if (!loanSle || loanSle->isFlag(lsfLoanConfidential))
         return normalCost;
-    }
 
     if (loanSle->at(sfPaymentRemaining) <= kLoanPaymentsPerFeeIncrement)
     {
@@ -262,6 +261,13 @@ LoanPay::preclaim(PreclaimContext const& ctx)
     if (loanSle->at(sfBorrower) != account)
     {
         JLOG(ctx.j.warn()) << "Loan does not belong to the account.";
+        return tecNO_PERMISSION;
+    }
+
+    // A confidential Loan is paid with ConfidentialLoanPay (spec §12)
+    if (loanSle->isFlag(lsfLoanConfidential))
+    {
+        JLOG(ctx.j.warn()) << "Loan is confidential.";
         return tecNO_PERMISSION;
     }
 

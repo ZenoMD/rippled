@@ -15,9 +15,11 @@
 #include <xrpl/ledger/helpers/VaultHelpers.h>
 #include <xrpl/protocol/AccountID.h>
 #include <xrpl/protocol/Asset.h>
+#include <xrpl/protocol/ConfidentialTransfer.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/LedgerFormats.h>
+#include <xrpl/protocol/MPTIssue.h>
 #include <xrpl/protocol/Protocol.h>
 #include <xrpl/protocol/SField.h>
 #include <xrpl/protocol/STAmount.h>
@@ -33,6 +35,8 @@
 #include <xrpl/protocol/XRPAmount.h>
 #include <xrpl/tx/Transactor.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -49,9 +53,130 @@ namespace xrpl {
 // strictly-later StartDate) is required to fit in kMinInvestmentPeriod.
 static_assert(kMinInvestmentPeriod >= LoanSet::kMinPaymentInterval + kLoanRedemptionBuffer + 1);
 
+namespace {
+
+// The fields of a confidential LoanSet (spec §11.1)
+constexpr auto kConfidentialFields = std::to_array<SField const*>({
+    &sfSenderEncryptedAmount,
+    &sfDestinationEncryptedAmount,
+    &sfIssuerEncryptedAmount,
+    &sfAuditorEncryptedAmount,
+    &sfBalanceCommitment,
+    &sfAmountCommitment,
+    &sfZKProof,
+    &sfLoanAuditorEncryptionKey,
+    &sfLoanAuditorEncryptedPrincipal,
+    &sfBorrowerEncryptedAmountOwed,
+    &sfBrokerEncryptedAmountOwed,
+    &sfLoanAuditorEncryptedAmountOwed,
+    &sfBorrowerEncryptedPeriodicPayment,
+    &sfBrokerEncryptedPeriodicPayment,
+    &sfLoanAuditorEncryptedPeriodicPayment,
+    &sfAmountOwedCommitment,
+    &sfPeriodicPaymentCommitment,
+});
+
+// Fields a confidential LoanSet must not carry: the terms are encrypted
+constexpr auto kPublicTermFields = std::to_array<SField const*>({
+    &sfPrincipalRequested,
+    &sfLoanOriginationFee,
+    &sfLoanServiceFee,
+    &sfLatePaymentFee,
+    &sfClosePaymentFee,
+    &sfOverpaymentFee,
+    &sfInterestRate,
+    &sfLateInterestRate,
+    &sfCloseInterestRate,
+    &sfOverpaymentInterestRate,
+});
+
+// Each term's ciphertexts, which share one randomness (spec §11.2)
+std::array<std::vector<SF_VL const*>, 3> const kTermCiphertexts{{
+    {&sfSenderEncryptedAmount,
+     &sfDestinationEncryptedAmount,
+     &sfIssuerEncryptedAmount,
+     &sfAuditorEncryptedAmount,
+     &sfLoanAuditorEncryptedPrincipal},
+    {&sfBorrowerEncryptedAmountOwed, &sfBrokerEncryptedAmountOwed, &sfLoanAuditorEncryptedAmountOwed},
+    {&sfBorrowerEncryptedPeriodicPayment,
+     &sfBrokerEncryptedPeriodicPayment,
+     &sfLoanAuditorEncryptedPeriodicPayment},
+}};
+
+NotTEC
+preflightConfidential(STTx const& tx)
+{
+    for (auto const* field : kConfidentialFields)
+    {
+        if (!tx.isFieldPresent(*field))
+            return temMALFORMED;
+    }
+    for (auto const* field : kPublicTermFields)
+    {
+        if (tx.isFieldPresent(*field))
+            return temMALFORMED;
+    }
+    if (tx.isFlag(tfLoanOverpayment))
+        return temMALFORMED;
+
+    for (auto const& term : kTermCiphertexts)
+    {
+        for (auto const* field : term)
+        {
+            if (tx[*field].size() != kEcGamalEncryptedTotalLength || !isValidCiphertext(tx[*field]))
+                return temBAD_CIPHERTEXT;
+        }
+    }
+
+    for (auto const* field :
+         {&sfLoanAuditorEncryptionKey,
+          &sfBalanceCommitment,
+          &sfAmountCommitment,
+          &sfAmountOwedCommitment,
+          &sfPeriodicPaymentCommitment})
+    {
+        if (!isValidCompressedECPoint(tx[*field]))
+            return temMALFORMED;
+    }
+    if (tx[sfZKProof].size() != LoanSet::kConfidentialProofLength)
+        return temMALFORMED;
+
+    // A term's ciphertexts share their first 33 bytes (C1 = r·G); different
+    // terms must not.
+    std::vector<Slice> c1s;
+    for (auto const& term : kTermCiphertexts)
+    {
+        Slice const c1{tx[*term.front()].data(), kEcCiphertextComponentLength};
+        for (auto const* field : term)
+        {
+            if (Slice{tx[*field].data(), kEcCiphertextComponentLength} != c1)
+                return temMALFORMED;
+        }
+        for (auto const& other : c1s)
+        {
+            if (other == c1)
+                return temMALFORMED;
+        }
+        c1s.push_back(c1);
+    }
+
+    return tesSUCCESS;
+}
+
+}  // namespace
+
+bool
+LoanSet::isConfidential(STTx const& tx)
+{
+    return std::ranges::any_of(
+        kConfidentialFields, [&](SField const* field) { return tx.isFieldPresent(*field); });
+}
+
 bool
 LoanSet::checkExtraFeatures(PreflightContext const& ctx)
 {
+    if (isConfidential(ctx.tx) && !checkConfidentialLendingDependencies(ctx.rules))
+        return false;
     return checkLendingProtocolDependencies(ctx.rules, ctx.tx);
 }
 
@@ -113,12 +238,22 @@ LoanSet::preflight(PreflightContext const& ctx)
         if (!validNumericMinimum(tx[~*field]))
             return temINVALID;
     }
-    // Principal Requested is required
-    auto const p = tx[sfPrincipalRequested];
-    if (p <= 0)
-        return temINVALID;
-    if (!validNumericRange(tx[~sfLoanOriginationFee], p))
-        return temINVALID;
+    if (isConfidential(tx))
+    {
+        if (auto const ret = preflightConfidential(tx))
+            return ret;
+    }
+    else
+    {
+        // Principal Requested is required
+        if (!tx.isFieldPresent(sfPrincipalRequested))
+            return temMALFORMED;
+        auto const p = tx[sfPrincipalRequested];
+        if (p <= 0)
+            return temINVALID;
+        if (!validNumericRange(tx[~sfLoanOriginationFee], p))
+            return temINVALID;
+    }
     if (!validNumericRange(tx[~sfInterestRate], kMaxInterestRate))
         return temINVALID;
     if (!validNumericRange(tx[~sfOverpaymentFee], kMaxOverpaymentFee))
@@ -210,7 +345,10 @@ LoanSet::calculateBaseFee(ReadView const& view, STTx const& tx)
         return counterSig.isFieldPresent(sfTxnSignature) ? 1 : 0;
     }();
 
-    return normalCost + (signerCount * baseFee);
+    // A confidential LoanSet also pays the XLS-96 confidential multiplier.
+    auto const confidentialCost = isConfidential(tx) ? baseFee * kConfidentialFeeMultiplier : XRPAmount{};
+
+    return normalCost + (signerCount * baseFee) + confidentialCost;
 }
 
 std::vector<OptionaledField<STNumber>> const&
@@ -232,6 +370,153 @@ static std::uint32_t
 getStartDate(ReadView const& view)
 {
     return view.header().closeTime.time_since_epoch().count();
+}
+
+namespace {
+
+// Spec §11.2: verify each part of a confidential LoanSet's ZKProof.
+TER
+verifyConfidentialLoanProof(
+    STTx const& tx,
+    SLE const& issuance,
+    SLE const& lending,
+    SLE const& borrowerToken,
+    UInt256 const& contextHash)
+{
+    Slice const proof = tx[sfZKProof];
+    auto const part = [&proof](std::size_t offset, std::size_t size) {
+        return Slice{proof.data() + offset, size};
+    };
+    constexpr std::size_t kTermsOffset = kEcSendProofLength;
+    constexpr std::size_t kRangeOffset = kTermsOffset + (3 * kEcSendSigmaProofLength);
+
+    Slice const brokerKey = lending[sfHolderEncryptionKey];
+    Slice const borrowerKey = borrowerToken[sfHolderEncryptionKey];
+    Slice const loanAuditorKey = tx[sfLoanAuditorEncryptionKey];
+    Slice const spending = lending[sfConfidentialBalanceSpending];
+    Slice const balanceCommitment = tx[sfBalanceCommitment];
+
+    // Run every check before returning, as XLS-96 does.
+    bool valid = true;
+    auto const check = [&valid](TER ter) {
+        if (!isTesSuccess(ter))
+            valid = false;
+    };
+
+    // Part 1: the principal transfer, as an XLS-96 Send
+    check(verifySendProof(
+        part(0, kEcSendProofLength),
+        {.publicKey = brokerKey, .encryptedAmount = tx[sfSenderEncryptedAmount]},
+        {.publicKey = borrowerKey, .encryptedAmount = tx[sfDestinationEncryptedAmount]},
+        {.publicKey = issuance[sfIssuerEncryptionKey],
+         .encryptedAmount = tx[sfIssuerEncryptedAmount]},
+        ConfidentialRecipient{
+            .publicKey = issuance[sfAuditorEncryptionKey],
+            .encryptedAmount = tx[sfAuditorEncryptedAmount]},
+        spending,
+        tx[sfAmountCommitment],
+        balanceCommitment,
+        contextHash));
+
+    // Parts 2-4: the Loan Auditor's principal and the terms' ciphertexts
+    auto const sigma = [&](std::size_t index,
+                           std::vector<ConfidentialRecipient> const& recipients,
+                           Slice const& commitment) {
+        check(verifyCompactSigmaProof(
+            part(kTermsOffset + (index * kEcSendSigmaProofLength), kEcSendSigmaProofLength),
+            recipients,
+            commitment,
+            brokerKey,
+            spending,
+            balanceCommitment,
+            contextHash));
+    };
+    sigma(
+        0,
+        {{.publicKey = loanAuditorKey, .encryptedAmount = tx[sfLoanAuditorEncryptedPrincipal]}},
+        tx[sfAmountCommitment]);
+    sigma(
+        1,
+        {{.publicKey = borrowerKey, .encryptedAmount = tx[sfBorrowerEncryptedAmountOwed]},
+         {.publicKey = brokerKey, .encryptedAmount = tx[sfBrokerEncryptedAmountOwed]},
+         {.publicKey = loanAuditorKey, .encryptedAmount = tx[sfLoanAuditorEncryptedAmountOwed]}},
+        tx[sfAmountOwedCommitment]);
+    sigma(
+        2,
+        {{.publicKey = borrowerKey, .encryptedAmount = tx[sfBorrowerEncryptedPeriodicPayment]},
+         {.publicKey = brokerKey, .encryptedAmount = tx[sfBrokerEncryptedPeriodicPayment]},
+         {.publicKey = loanAuditorKey,
+          .encryptedAmount = tx[sfLoanAuditorEncryptedPeriodicPayment]}},
+        tx[sfPeriodicPaymentCommitment]);
+
+    // Part 5: O, Q >= 0
+    Slice const owed = tx[sfAmountOwedCommitment];
+    Slice const periodic = tx[sfPeriodicPaymentCommitment];
+    check(verifyRangeProof(
+        part(kRangeOffset, kEcDoubleBulletproofLength),
+        {Buffer{owed.data(), owed.size()}, Buffer{periodic.data(), periodic.size()}},
+        contextHash));
+
+    // Part 6: O >= P and N*Q >= O
+    auto const paymentTotal = tx[~sfPaymentTotal].value_or(LoanSet::kDefaultPaymentTotal);
+    auto const owedLessPrincipal = combinePoints(owed, 1, tx[sfAmountCommitment], -1);
+    auto const scheduleLessOwed = combinePoints(periodic, paymentTotal, owed, -1);
+    if (!owedLessPrincipal || !scheduleLessOwed)
+        return tecBAD_PROOF;
+    check(verifyRangeProof(
+        part(kRangeOffset + kEcDoubleBulletproofLength, kEcDoubleBulletproofLength),
+        {*owedLessPrincipal, *scheduleLessOwed},
+        contextHash));
+
+    return valid ? TER{tesSUCCESS} : TER{tecBAD_PROOF};
+}
+
+}  // namespace
+
+TER
+LoanSet::preclaimConfidential(
+    PreclaimContext const& ctx,
+    SLE::ConstRef brokerSle,
+    SLE::ConstRef vault,
+    AccountID const& borrower)
+{
+    Asset const asset = vault->at(sfAsset);
+    if (!asset.holds<MPTIssue>())
+        return tefBAD_LEDGER;  // LCOV_EXCL_LINE
+    auto const issuanceID = asset.get<MPTIssue>().getMptID();
+    auto const brokerPseudo = brokerSle->at(sfAccount);
+
+    auto const issuance = ctx.view.read(keylet::mptokenIssuance(issuanceID));
+    auto const lending = ctx.view.read(keylet::mptoken(issuanceID, brokerPseudo));
+    if (!issuance || !lending)
+        return tefBAD_LEDGER;  // LCOV_EXCL_LINE
+
+    // The Borrower must hold a confidential balance (spec §11.4 condition 6)
+    auto const borrowerToken = ctx.view.read(keylet::mptoken(issuanceID, borrower));
+    if (!borrowerToken || !borrowerToken->isFieldPresent(sfHolderEncryptionKey) ||
+        !borrowerToken->isFieldPresent(sfConfidentialBalanceInbox) ||
+        !borrowerToken->isFieldPresent(sfIssuerEncryptedBalance) ||
+        !borrowerToken->isFieldPresent(sfAuditorEncryptedBalance))
+    {
+        JLOG(ctx.j.warn()) << "Borrower has no confidential balance.";
+        return tecNO_PERMISSION;
+    }
+
+    for (auto const& account : {brokerPseudo, borrower})
+    {
+        if (auto const ter = checkFrozen(ctx.view, account, asset))
+            return ter;
+    }
+    if (auto const ter = checkDeepFrozen(ctx.view, brokerSle->at(sfOwner), asset))
+        return ter;
+
+    auto const contextHash = getLoanSetContextHash(
+        brokerPseudo,
+        issuanceID,
+        ctx.tx.getSeqProxy().value(),
+        borrower,
+        (*lending)[~sfConfidentialBalanceVersion].value_or(0));
+    return verifyConfidentialLoanProof(ctx.tx, *issuance, *lending, *borrowerToken, contextHash);
 }
 
 TER
@@ -350,6 +635,16 @@ LoanSet::preclaim(PreclaimContext const& ctx)
             }
         }
     }
+
+    // The confidential Loan fields are required with a confidential LoanBroker
+    // and not allowed otherwise (spec §11.4 condition 5).
+    if (brokerSle->isFlag(lsfLoanBrokerConfidential) != isConfidential(tx))
+    {
+        JLOG(ctx.j.warn()) << "Confidential fields do not match the LoanBroker.";
+        return tecNO_PERMISSION;
+    }
+    if (brokerSle->isFlag(lsfLoanBrokerConfidential))
+        return preclaimConfidential(ctx, brokerSle, vault, borrower);
 
     // Instant interest recognition credits interestDue into AssetsTotal, so a vault
     // already at AssetsMaximum cannot take another loan. Cash-basis origination
@@ -506,6 +801,9 @@ LoanSet::doApply()
             return ter;
         }
     }
+
+    if (brokerSle->isFlag(lsfLoanBrokerConfidential))
+        return doApplyConfidential(brokerSle, borrowerSle, borrower);
 
     auto const principalRequested = tx[sfPrincipalRequested];
 
@@ -798,16 +1096,165 @@ LoanSet::doApply()
     return tesSUCCESS;
 }
 
-void
-LoanSet::visitInvariantEntry(bool, SLE::ConstRef, SLE::ConstRef)
+TER
+LoanSet::doApplyConfidential(SLE::Ref brokerSle, SLE::Ref borrowerSle, AccountID const& borrower)
 {
-    // No transaction-specific invariants yet (future work).
+    auto const& tx = ctx_.tx;
+    auto& view = ctx_.view();
+
+    auto const vaultSle = view.read(keylet::vault(brokerSle->at(sfVaultID)));
+    if (!vaultSle)
+        return tefBAD_LEDGER;  // LCOV_EXCL_LINE
+    Asset const vaultAsset = vaultSle->at(sfAsset);
+    auto const issuanceID = vaultAsset.get<MPTIssue>().getMptID();
+    auto const brokerPseudo = brokerSle->at(sfAccount);
+
+    auto const issuance = view.read(keylet::mptokenIssuance(issuanceID));
+    auto const lending = view.peek(keylet::mptoken(issuanceID, brokerPseudo));
+    auto const borrowerToken = view.peek(keylet::mptoken(issuanceID, borrower));
+    if (!issuance || !lending || !borrowerToken)
+        return tefBAD_LEDGER;  // LCOV_EXCL_LINE
+
+    increaseOwnerCount(view, borrowerSle, {}, 1, j_);
+    {
+        auto const balance =
+            accountID_ == borrower ? preFeeBalance_ : borrowerSle->at(sfBalance).value().xrp();
+        if (balance < accountReserve(view, borrowerSle, j_))
+            return tecINSUFFICIENT_RESERVE;
+    }
+
+    if (auto const ter = requireAuth(view, vaultAsset, borrower, AuthType::StrongAuth))
+        return ter;
+    if (auto const ter = requireAuth(view, vaultAsset, brokerSle->at(sfOwner), AuthType::StrongAuth))
+        return ter;
+
+    // 1. Move the principal from the Lending Balance to the Borrower's inbox
+    Slice const proof = tx[sfZKProof];
+    if (auto const ter = moveConfidentialAmount(
+            view,
+            issuance,
+            lending,
+            borrowerToken,
+            tx[sfSenderEncryptedAmount],
+            tx[sfDestinationEncryptedAmount],
+            tx[sfIssuerEncryptedAmount],
+            tx[sfAuditorEncryptedAmount],
+            Slice{proof.data(), kEcBlindingFactorLength}))
+        return ter;
+
+    // 2. Create the Loan, with the computed fields at 0 and the encrypted terms
+    auto const startDate = getStartDate(view);
+    auto const paymentInterval = tx[~sfPaymentInterval].value_or(kDefaultPaymentInterval);
+    auto loanSequenceProxy = brokerSle->at(sfLoanSequence);
+    auto loan =
+        std::make_shared<SLE>(keylet::loan(brokerSle->key(), SeqProxy::rawSequence(*loanSequenceProxy)));
+
+    loan->setFlag(lsfLoanConfidential);
+    loan->at(sfStartDate) = startDate;
+    loan->at(sfPaymentInterval) = paymentInterval;
+    loan->at(sfLoanSequence) = *loanSequenceProxy;
+    loan->at(sfLoanBrokerID) = brokerSle->key();
+    loan->at(sfBorrower) = borrower;
+    loan->at(sfGracePeriod) = tx[~sfGracePeriod].value_or(kDefaultGracePeriod);
+    loan->at(sfPeriodicPayment) = Number{};
+    loan->at(sfPreviousPaymentDueDate) = 0;
+    loan->at(sfNextPaymentDueDate) = startDate + paymentInterval;
+    loan->at(sfPaymentRemaining) = tx[~sfPaymentTotal].value_or(kDefaultPaymentTotal);
+
+    // The principal copies are the transfer's ciphertexts as submitted, so they
+    // keep the principal's shared randomness.
+    loan->setFieldVL(sfBrokerEncryptedPrincipal, tx[sfSenderEncryptedAmount]);
+    loan->setFieldVL(sfBorrowerEncryptedPrincipal, tx[sfDestinationEncryptedAmount]);
+    for (auto const* field :
+         {&sfLoanAuditorEncryptionKey,
+          &sfLoanAuditorEncryptedPrincipal,
+          &sfBorrowerEncryptedAmountOwed,
+          &sfBrokerEncryptedAmountOwed,
+          &sfLoanAuditorEncryptedAmountOwed,
+          &sfBorrowerEncryptedPeriodicPayment,
+          &sfBrokerEncryptedPeriodicPayment,
+          &sfLoanAuditorEncryptedPeriodicPayment})
+        loan->setFieldVL(*field, tx[*field]);
+    loan->setFieldU32(sfConfidentialLoanVersion, 0);
+    view.insert(loan);
+
+    adjustLoanBrokerOwnerCount(view, brokerSle, 1, j_);
+    loanSequenceProxy += 1;
+    if (loanSequenceProxy == 0)
+        return tecMAX_SEQUENCE_REACHED;
+    view.update(brokerSle);
+
+    if (auto const ter = dirLink(view, brokerPseudo, loan, sfLoanBrokerNode))
+        return ter;
+    if (auto const ter = dirLink(view, borrower, loan, sfOwnerNode))
+        return ter;
+
+    associateAsset(*brokerSle, vaultAsset);
+    associateAsset(*loan, vaultAsset);
+
+    return tesSUCCESS;
+}
+
+void
+LoanSet::visitInvariantEntry(bool, SLE::ConstRef before, SLE::ConstRef after)
+{
+    auto const& sle = after ? after : before;
+    if (!sle)
+        return;
+    switch (sle->getType())
+    {
+        case ltVAULT:
+            vaultModified_ = true;
+            break;
+        case ltLOAN_BROKER:
+            if (before && after && before->at(sfDebtTotal) != after->at(sfDebtTotal))
+                brokerDebtChanged_ = true;
+            break;
+        case ltMPTOKEN:
+            if (!before || !after || (*before)[sfMPTAmount] != (*after)[sfMPTAmount])
+                supplyChanged_ = true;
+            break;
+        case ltMPTOKEN_ISSUANCE:
+            if (before && after &&
+                ((*before)[sfOutstandingAmount] != (*after)[sfOutstandingAmount] ||
+                 (*before)[~sfConfidentialOutstandingAmount] !=
+                     (*after)[~sfConfidentialOutstandingAmount]))
+                supplyChanged_ = true;
+            break;
+        default:
+            break;
+    }
 }
 
 bool
-LoanSet::finalizeInvariants(STTx const&, TER, XRPAmount, ReadView const&, beast::Journal const&)
+LoanSet::finalizeInvariants(
+    STTx const& tx,
+    TER result,
+    XRPAmount,
+    ReadView const&,
+    beast::Journal const& j)
 {
-    // No transaction-specific invariants yet (future work).
+    if (!isTesSuccess(result))
+        return true;
+
+    if (!isConfidential(tx))
+    {
+        // A public LoanSet always funds the Loan from the Vault.
+        if (!vaultModified_)
+        {
+            JLOG(j.fatal()) << "Invariant failed: LoanSet succeeded without modifying a vault";
+            return false;
+        }
+        return true;
+    }
+
+    // Spec §11.6
+    if (vaultModified_ || brokerDebtChanged_ || supplyChanged_)
+    {
+        JLOG(j.fatal()) << "Invariant failed: confidential LoanSet must not change the Vault, "
+                           "DebtTotal or any public or confidential supply";
+        return false;
+    }
     return true;
 }
 

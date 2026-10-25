@@ -14,9 +14,11 @@
 
 #include <secp256k1.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <vector>
 
 namespace xrpl {
 
@@ -537,5 +539,90 @@ verifyConvertBackProof(
     Slice const& balanceCommitment,
     uint64_t amount,
     UInt256 const& contextHash);
+
+//------------------------------------------------------------------------------
+// Confidential lending (ConfidentialLendingProtocol)
+
+/** Context hash for a confidential LoanSet: the ConfidentialMPTSend layout with
+    the LoanSet type, the LoanBroker pseudo-account as sender and the Borrower
+    as destination. */
+UInt256
+getLoanSetContextHash(
+    AccountID const& brokerPseudo,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence,
+    AccountID const& borrower,
+    std::uint32_t lendingBalanceVersion);
+
+/** Context hash for ConfidentialLoanPay: the ConfidentialMPTSend layout with
+    the ConfidentialLoanPay type, followed by the LoanID and the Loan's
+    ConfidentialLoanVersion. */
+UInt256
+getConfidentialLoanPayContextHash(
+    AccountID const& borrower,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence,
+    AccountID const& brokerPseudo,
+    std::uint32_t borrowerVersion,
+    UInt256 const& loanID,
+    std::uint32_t loanVersion);
+
+/** Context hash for LoanBrokerSettle: the ConfidentialMPTConvertBack layout
+    with the LoanBrokerSettle type and the LoanBroker pseudo-account. */
+UInt256
+getLoanBrokerSettleContextHash(
+    AccountID const& brokerPseudo,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence,
+    std::uint32_t lendingBalanceVersion);
+
+/**
+ * @brief Verify an XLS-96 Send compact sigma proof over any number of
+ * recipients.
+ *
+ * Proves that every recipient ciphertext encrypts the value committed in
+ * `commitment` with one shared randomness, and that the holder of
+ * `balanceKey` owns `balanceCiphertext`, to which `balanceCommitment` commits.
+ * The recipient ciphertexts must share their first 33 bytes.
+ */
+TER
+verifyCompactSigmaProof(
+    Slice const& proof,
+    std::vector<ConfidentialRecipient> const& recipients,
+    Slice const& commitment,
+    Slice const& balanceKey,
+    Slice const& balanceCiphertext,
+    Slice const& balanceCommitment,
+    UInt256 const& contextHash);
+
+/**
+ * @brief Verify an XLS-96 ConvertBack compact sigma proof: the holder of
+ * `pubKey` can decrypt `ciphertext`, and `commitment` commits to its value.
+ */
+TER
+verifyCommitmentLinkProof(
+    Slice const& proof,
+    Slice const& pubKey,
+    Slice const& ciphertext,
+    Slice const& commitment,
+    UInt256 const& contextHash);
+
+/**
+ * @brief Verify an aggregated Bulletproof that each commitment is to a value
+ * in [0, 2^64). Supports one or two commitments, as XLS-96 does.
+ */
+TER
+verifyRangeProof(
+    Slice const& proof,
+    std::vector<Buffer> const& commitments,
+    UInt256 const& contextHash);
+
+/**
+ * @brief Compute a·A + b·B for compressed points A and B and signed integer
+ * multipliers, returning the compressed result, or nullopt if it is the point
+ * at infinity or an input is invalid.
+ */
+std::optional<Buffer>
+combinePoints(Slice const& a, std::int64_t aMultiplier, Slice const& b, std::int64_t bMultiplier);
 
 }  // namespace xrpl

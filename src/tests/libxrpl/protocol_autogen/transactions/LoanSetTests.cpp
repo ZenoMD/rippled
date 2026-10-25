@@ -46,11 +46,27 @@ TEST(TransactionsLoanSetTests, BuilderSettersRoundTrip)
     auto const paymentTotalValue = canonical_UINT32();
     auto const paymentIntervalValue = canonical_UINT32();
     auto const gracePeriodValue = canonical_UINT32();
+    auto const senderEncryptedAmountValue = canonical_VL();
+    auto const destinationEncryptedAmountValue = canonical_VL();
+    auto const issuerEncryptedAmountValue = canonical_VL();
+    auto const auditorEncryptedAmountValue = canonical_VL();
+    auto const balanceCommitmentValue = canonical_VL();
+    auto const amountCommitmentValue = canonical_VL();
+    auto const zKProofValue = canonical_VL();
+    auto const loanAuditorEncryptionKeyValue = canonical_VL();
+    auto const loanAuditorEncryptedPrincipalValue = canonical_VL();
+    auto const borrowerEncryptedAmountOwedValue = canonical_VL();
+    auto const brokerEncryptedAmountOwedValue = canonical_VL();
+    auto const loanAuditorEncryptedAmountOwedValue = canonical_VL();
+    auto const borrowerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const brokerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const loanAuditorEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const amountOwedCommitmentValue = canonical_VL();
+    auto const periodicPaymentCommitmentValue = canonical_VL();
 
     LoanSetBuilder builder{
         accountValue,
         loanBrokerIDValue,
-        principalRequestedValue,
         sequenceValue,
         feeValue
     };
@@ -68,9 +84,27 @@ TEST(TransactionsLoanSetTests, BuilderSettersRoundTrip)
     builder.setLateInterestRate(lateInterestRateValue);
     builder.setCloseInterestRate(closeInterestRateValue);
     builder.setOverpaymentInterestRate(overpaymentInterestRateValue);
+    builder.setPrincipalRequested(principalRequestedValue);
     builder.setPaymentTotal(paymentTotalValue);
     builder.setPaymentInterval(paymentIntervalValue);
     builder.setGracePeriod(gracePeriodValue);
+    builder.setSenderEncryptedAmount(senderEncryptedAmountValue);
+    builder.setDestinationEncryptedAmount(destinationEncryptedAmountValue);
+    builder.setIssuerEncryptedAmount(issuerEncryptedAmountValue);
+    builder.setAuditorEncryptedAmount(auditorEncryptedAmountValue);
+    builder.setBalanceCommitment(balanceCommitmentValue);
+    builder.setAmountCommitment(amountCommitmentValue);
+    builder.setZKProof(zKProofValue);
+    builder.setLoanAuditorEncryptionKey(loanAuditorEncryptionKeyValue);
+    builder.setLoanAuditorEncryptedPrincipal(loanAuditorEncryptedPrincipalValue);
+    builder.setBorrowerEncryptedAmountOwed(borrowerEncryptedAmountOwedValue);
+    builder.setBrokerEncryptedAmountOwed(brokerEncryptedAmountOwedValue);
+    builder.setLoanAuditorEncryptedAmountOwed(loanAuditorEncryptedAmountOwedValue);
+    builder.setBorrowerEncryptedPeriodicPayment(borrowerEncryptedPeriodicPaymentValue);
+    builder.setBrokerEncryptedPeriodicPayment(brokerEncryptedPeriodicPaymentValue);
+    builder.setLoanAuditorEncryptedPeriodicPayment(loanAuditorEncryptedPeriodicPaymentValue);
+    builder.setAmountOwedCommitment(amountOwedCommitmentValue);
+    builder.setPeriodicPaymentCommitment(periodicPaymentCommitmentValue);
 
     auto tx = builder.build(publicKey, secretKey);
 
@@ -91,12 +125,6 @@ TEST(TransactionsLoanSetTests, BuilderSettersRoundTrip)
         auto const& expected = loanBrokerIDValue;
         auto const actual = tx.getLoanBrokerID();
         expectEqualField(expected, actual, "sfLoanBrokerID");
-    }
-
-    {
-        auto const& expected = principalRequestedValue;
-        auto const actual = tx.getPrincipalRequested();
-        expectEqualField(expected, actual, "sfPrincipalRequested");
     }
 
     // Verify optional fields
@@ -197,6 +225,14 @@ TEST(TransactionsLoanSetTests, BuilderSettersRoundTrip)
     }
 
     {
+        auto const& expected = principalRequestedValue;
+        auto const actualOpt = tx.getPrincipalRequested();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfPrincipalRequested should be present";
+        expectEqualField(expected, *actualOpt, "sfPrincipalRequested");
+        EXPECT_TRUE(tx.hasPrincipalRequested());
+    }
+
+    {
         auto const& expected = paymentTotalValue;
         auto const actualOpt = tx.getPaymentTotal();
         ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfPaymentTotal should be present";
@@ -218,6 +254,142 @@ TEST(TransactionsLoanSetTests, BuilderSettersRoundTrip)
         ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfGracePeriod should be present";
         expectEqualField(expected, *actualOpt, "sfGracePeriod");
         EXPECT_TRUE(tx.hasGracePeriod());
+    }
+
+    {
+        auto const& expected = senderEncryptedAmountValue;
+        auto const actualOpt = tx.getSenderEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfSenderEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfSenderEncryptedAmount");
+        EXPECT_TRUE(tx.hasSenderEncryptedAmount());
+    }
+
+    {
+        auto const& expected = destinationEncryptedAmountValue;
+        auto const actualOpt = tx.getDestinationEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfDestinationEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfDestinationEncryptedAmount");
+        EXPECT_TRUE(tx.hasDestinationEncryptedAmount());
+    }
+
+    {
+        auto const& expected = issuerEncryptedAmountValue;
+        auto const actualOpt = tx.getIssuerEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfIssuerEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfIssuerEncryptedAmount");
+        EXPECT_TRUE(tx.hasIssuerEncryptedAmount());
+    }
+
+    {
+        auto const& expected = auditorEncryptedAmountValue;
+        auto const actualOpt = tx.getAuditorEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfAuditorEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfAuditorEncryptedAmount");
+        EXPECT_TRUE(tx.hasAuditorEncryptedAmount());
+    }
+
+    {
+        auto const& expected = balanceCommitmentValue;
+        auto const actualOpt = tx.getBalanceCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBalanceCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfBalanceCommitment");
+        EXPECT_TRUE(tx.hasBalanceCommitment());
+    }
+
+    {
+        auto const& expected = amountCommitmentValue;
+        auto const actualOpt = tx.getAmountCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfAmountCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfAmountCommitment");
+        EXPECT_TRUE(tx.hasAmountCommitment());
+    }
+
+    {
+        auto const& expected = zKProofValue;
+        auto const actualOpt = tx.getZKProof();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfZKProof should be present";
+        expectEqualField(expected, *actualOpt, "sfZKProof");
+        EXPECT_TRUE(tx.hasZKProof());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptionKeyValue;
+        auto const actualOpt = tx.getLoanAuditorEncryptionKey();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptionKey should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptionKey");
+        EXPECT_TRUE(tx.hasLoanAuditorEncryptionKey());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPrincipalValue;
+        auto const actualOpt = tx.getLoanAuditorEncryptedPrincipal();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptedPrincipal should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedPrincipal");
+        EXPECT_TRUE(tx.hasLoanAuditorEncryptedPrincipal());
+    }
+
+    {
+        auto const& expected = borrowerEncryptedAmountOwedValue;
+        auto const actualOpt = tx.getBorrowerEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBorrowerEncryptedAmountOwed should be present";
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedAmountOwed");
+        EXPECT_TRUE(tx.hasBorrowerEncryptedAmountOwed());
+    }
+
+    {
+        auto const& expected = brokerEncryptedAmountOwedValue;
+        auto const actualOpt = tx.getBrokerEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBrokerEncryptedAmountOwed should be present";
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedAmountOwed");
+        EXPECT_TRUE(tx.hasBrokerEncryptedAmountOwed());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedAmountOwedValue;
+        auto const actualOpt = tx.getLoanAuditorEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptedAmountOwed should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedAmountOwed");
+        EXPECT_TRUE(tx.hasLoanAuditorEncryptedAmountOwed());
+    }
+
+    {
+        auto const& expected = borrowerEncryptedPeriodicPaymentValue;
+        auto const actualOpt = tx.getBorrowerEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBorrowerEncryptedPeriodicPayment should be present";
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedPeriodicPayment");
+        EXPECT_TRUE(tx.hasBorrowerEncryptedPeriodicPayment());
+    }
+
+    {
+        auto const& expected = brokerEncryptedPeriodicPaymentValue;
+        auto const actualOpt = tx.getBrokerEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBrokerEncryptedPeriodicPayment should be present";
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedPeriodicPayment");
+        EXPECT_TRUE(tx.hasBrokerEncryptedPeriodicPayment());
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPeriodicPaymentValue;
+        auto const actualOpt = tx.getLoanAuditorEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptedPeriodicPayment should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedPeriodicPayment");
+        EXPECT_TRUE(tx.hasLoanAuditorEncryptedPeriodicPayment());
+    }
+
+    {
+        auto const& expected = amountOwedCommitmentValue;
+        auto const actualOpt = tx.getAmountOwedCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfAmountOwedCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfAmountOwedCommitment");
+        EXPECT_TRUE(tx.hasAmountOwedCommitment());
+    }
+
+    {
+        auto const& expected = periodicPaymentCommitmentValue;
+        auto const actualOpt = tx.getPeriodicPaymentCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfPeriodicPaymentCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfPeriodicPaymentCommitment");
+        EXPECT_TRUE(tx.hasPeriodicPaymentCommitment());
     }
 
 }
@@ -253,12 +425,28 @@ TEST(TransactionsLoanSetTests, BuilderFromStTxRoundTrip)
     auto const paymentTotalValue = canonical_UINT32();
     auto const paymentIntervalValue = canonical_UINT32();
     auto const gracePeriodValue = canonical_UINT32();
+    auto const senderEncryptedAmountValue = canonical_VL();
+    auto const destinationEncryptedAmountValue = canonical_VL();
+    auto const issuerEncryptedAmountValue = canonical_VL();
+    auto const auditorEncryptedAmountValue = canonical_VL();
+    auto const balanceCommitmentValue = canonical_VL();
+    auto const amountCommitmentValue = canonical_VL();
+    auto const zKProofValue = canonical_VL();
+    auto const loanAuditorEncryptionKeyValue = canonical_VL();
+    auto const loanAuditorEncryptedPrincipalValue = canonical_VL();
+    auto const borrowerEncryptedAmountOwedValue = canonical_VL();
+    auto const brokerEncryptedAmountOwedValue = canonical_VL();
+    auto const loanAuditorEncryptedAmountOwedValue = canonical_VL();
+    auto const borrowerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const brokerEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const loanAuditorEncryptedPeriodicPaymentValue = canonical_VL();
+    auto const amountOwedCommitmentValue = canonical_VL();
+    auto const periodicPaymentCommitmentValue = canonical_VL();
 
     // Build an initial transaction
     LoanSetBuilder initialBuilder{
         accountValue,
         loanBrokerIDValue,
-        principalRequestedValue,
         sequenceValue,
         feeValue
     };
@@ -275,9 +463,27 @@ TEST(TransactionsLoanSetTests, BuilderFromStTxRoundTrip)
     initialBuilder.setLateInterestRate(lateInterestRateValue);
     initialBuilder.setCloseInterestRate(closeInterestRateValue);
     initialBuilder.setOverpaymentInterestRate(overpaymentInterestRateValue);
+    initialBuilder.setPrincipalRequested(principalRequestedValue);
     initialBuilder.setPaymentTotal(paymentTotalValue);
     initialBuilder.setPaymentInterval(paymentIntervalValue);
     initialBuilder.setGracePeriod(gracePeriodValue);
+    initialBuilder.setSenderEncryptedAmount(senderEncryptedAmountValue);
+    initialBuilder.setDestinationEncryptedAmount(destinationEncryptedAmountValue);
+    initialBuilder.setIssuerEncryptedAmount(issuerEncryptedAmountValue);
+    initialBuilder.setAuditorEncryptedAmount(auditorEncryptedAmountValue);
+    initialBuilder.setBalanceCommitment(balanceCommitmentValue);
+    initialBuilder.setAmountCommitment(amountCommitmentValue);
+    initialBuilder.setZKProof(zKProofValue);
+    initialBuilder.setLoanAuditorEncryptionKey(loanAuditorEncryptionKeyValue);
+    initialBuilder.setLoanAuditorEncryptedPrincipal(loanAuditorEncryptedPrincipalValue);
+    initialBuilder.setBorrowerEncryptedAmountOwed(borrowerEncryptedAmountOwedValue);
+    initialBuilder.setBrokerEncryptedAmountOwed(brokerEncryptedAmountOwedValue);
+    initialBuilder.setLoanAuditorEncryptedAmountOwed(loanAuditorEncryptedAmountOwedValue);
+    initialBuilder.setBorrowerEncryptedPeriodicPayment(borrowerEncryptedPeriodicPaymentValue);
+    initialBuilder.setBrokerEncryptedPeriodicPayment(brokerEncryptedPeriodicPaymentValue);
+    initialBuilder.setLoanAuditorEncryptedPeriodicPayment(loanAuditorEncryptedPeriodicPaymentValue);
+    initialBuilder.setAmountOwedCommitment(amountOwedCommitmentValue);
+    initialBuilder.setPeriodicPaymentCommitment(periodicPaymentCommitmentValue);
 
     auto initialTx = initialBuilder.build(publicKey, secretKey);
 
@@ -299,12 +505,6 @@ TEST(TransactionsLoanSetTests, BuilderFromStTxRoundTrip)
         auto const& expected = loanBrokerIDValue;
         auto const actual = rebuiltTx.getLoanBrokerID();
         expectEqualField(expected, actual, "sfLoanBrokerID");
-    }
-
-    {
-        auto const& expected = principalRequestedValue;
-        auto const actual = rebuiltTx.getPrincipalRequested();
-        expectEqualField(expected, actual, "sfPrincipalRequested");
     }
 
     // Verify optional fields
@@ -393,6 +593,13 @@ TEST(TransactionsLoanSetTests, BuilderFromStTxRoundTrip)
     }
 
     {
+        auto const& expected = principalRequestedValue;
+        auto const actualOpt = rebuiltTx.getPrincipalRequested();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfPrincipalRequested should be present";
+        expectEqualField(expected, *actualOpt, "sfPrincipalRequested");
+    }
+
+    {
         auto const& expected = paymentTotalValue;
         auto const actualOpt = rebuiltTx.getPaymentTotal();
         ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfPaymentTotal should be present";
@@ -411,6 +618,125 @@ TEST(TransactionsLoanSetTests, BuilderFromStTxRoundTrip)
         auto const actualOpt = rebuiltTx.getGracePeriod();
         ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfGracePeriod should be present";
         expectEqualField(expected, *actualOpt, "sfGracePeriod");
+    }
+
+    {
+        auto const& expected = senderEncryptedAmountValue;
+        auto const actualOpt = rebuiltTx.getSenderEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfSenderEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfSenderEncryptedAmount");
+    }
+
+    {
+        auto const& expected = destinationEncryptedAmountValue;
+        auto const actualOpt = rebuiltTx.getDestinationEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfDestinationEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfDestinationEncryptedAmount");
+    }
+
+    {
+        auto const& expected = issuerEncryptedAmountValue;
+        auto const actualOpt = rebuiltTx.getIssuerEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfIssuerEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfIssuerEncryptedAmount");
+    }
+
+    {
+        auto const& expected = auditorEncryptedAmountValue;
+        auto const actualOpt = rebuiltTx.getAuditorEncryptedAmount();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfAuditorEncryptedAmount should be present";
+        expectEqualField(expected, *actualOpt, "sfAuditorEncryptedAmount");
+    }
+
+    {
+        auto const& expected = balanceCommitmentValue;
+        auto const actualOpt = rebuiltTx.getBalanceCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBalanceCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfBalanceCommitment");
+    }
+
+    {
+        auto const& expected = amountCommitmentValue;
+        auto const actualOpt = rebuiltTx.getAmountCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfAmountCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfAmountCommitment");
+    }
+
+    {
+        auto const& expected = zKProofValue;
+        auto const actualOpt = rebuiltTx.getZKProof();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfZKProof should be present";
+        expectEqualField(expected, *actualOpt, "sfZKProof");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptionKeyValue;
+        auto const actualOpt = rebuiltTx.getLoanAuditorEncryptionKey();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptionKey should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptionKey");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPrincipalValue;
+        auto const actualOpt = rebuiltTx.getLoanAuditorEncryptedPrincipal();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptedPrincipal should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedPrincipal");
+    }
+
+    {
+        auto const& expected = borrowerEncryptedAmountOwedValue;
+        auto const actualOpt = rebuiltTx.getBorrowerEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBorrowerEncryptedAmountOwed should be present";
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedAmountOwed");
+    }
+
+    {
+        auto const& expected = brokerEncryptedAmountOwedValue;
+        auto const actualOpt = rebuiltTx.getBrokerEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBrokerEncryptedAmountOwed should be present";
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedAmountOwed");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedAmountOwedValue;
+        auto const actualOpt = rebuiltTx.getLoanAuditorEncryptedAmountOwed();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptedAmountOwed should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedAmountOwed");
+    }
+
+    {
+        auto const& expected = borrowerEncryptedPeriodicPaymentValue;
+        auto const actualOpt = rebuiltTx.getBorrowerEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBorrowerEncryptedPeriodicPayment should be present";
+        expectEqualField(expected, *actualOpt, "sfBorrowerEncryptedPeriodicPayment");
+    }
+
+    {
+        auto const& expected = brokerEncryptedPeriodicPaymentValue;
+        auto const actualOpt = rebuiltTx.getBrokerEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfBrokerEncryptedPeriodicPayment should be present";
+        expectEqualField(expected, *actualOpt, "sfBrokerEncryptedPeriodicPayment");
+    }
+
+    {
+        auto const& expected = loanAuditorEncryptedPeriodicPaymentValue;
+        auto const actualOpt = rebuiltTx.getLoanAuditorEncryptedPeriodicPayment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfLoanAuditorEncryptedPeriodicPayment should be present";
+        expectEqualField(expected, *actualOpt, "sfLoanAuditorEncryptedPeriodicPayment");
+    }
+
+    {
+        auto const& expected = amountOwedCommitmentValue;
+        auto const actualOpt = rebuiltTx.getAmountOwedCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfAmountOwedCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfAmountOwedCommitment");
+    }
+
+    {
+        auto const& expected = periodicPaymentCommitmentValue;
+        auto const actualOpt = rebuiltTx.getPeriodicPaymentCommitment();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfPeriodicPaymentCommitment should be present";
+        expectEqualField(expected, *actualOpt, "sfPeriodicPaymentCommitment");
     }
 
 }
@@ -457,12 +783,10 @@ TEST(TransactionsLoanSetTests, OptionalFieldsReturnNullopt)
 
     // Transaction-specific required field values
     auto const loanBrokerIDValue = canonical_UINT256();
-    auto const principalRequestedValue = canonical_NUMBER();
 
     LoanSetBuilder builder{
         accountValue,
         loanBrokerIDValue,
-        principalRequestedValue,
         sequenceValue,
         feeValue
     };
@@ -496,12 +820,48 @@ TEST(TransactionsLoanSetTests, OptionalFieldsReturnNullopt)
     EXPECT_FALSE(tx.getCloseInterestRate().has_value());
     EXPECT_FALSE(tx.hasOverpaymentInterestRate());
     EXPECT_FALSE(tx.getOverpaymentInterestRate().has_value());
+    EXPECT_FALSE(tx.hasPrincipalRequested());
+    EXPECT_FALSE(tx.getPrincipalRequested().has_value());
     EXPECT_FALSE(tx.hasPaymentTotal());
     EXPECT_FALSE(tx.getPaymentTotal().has_value());
     EXPECT_FALSE(tx.hasPaymentInterval());
     EXPECT_FALSE(tx.getPaymentInterval().has_value());
     EXPECT_FALSE(tx.hasGracePeriod());
     EXPECT_FALSE(tx.getGracePeriod().has_value());
+    EXPECT_FALSE(tx.hasSenderEncryptedAmount());
+    EXPECT_FALSE(tx.getSenderEncryptedAmount().has_value());
+    EXPECT_FALSE(tx.hasDestinationEncryptedAmount());
+    EXPECT_FALSE(tx.getDestinationEncryptedAmount().has_value());
+    EXPECT_FALSE(tx.hasIssuerEncryptedAmount());
+    EXPECT_FALSE(tx.getIssuerEncryptedAmount().has_value());
+    EXPECT_FALSE(tx.hasAuditorEncryptedAmount());
+    EXPECT_FALSE(tx.getAuditorEncryptedAmount().has_value());
+    EXPECT_FALSE(tx.hasBalanceCommitment());
+    EXPECT_FALSE(tx.getBalanceCommitment().has_value());
+    EXPECT_FALSE(tx.hasAmountCommitment());
+    EXPECT_FALSE(tx.getAmountCommitment().has_value());
+    EXPECT_FALSE(tx.hasZKProof());
+    EXPECT_FALSE(tx.getZKProof().has_value());
+    EXPECT_FALSE(tx.hasLoanAuditorEncryptionKey());
+    EXPECT_FALSE(tx.getLoanAuditorEncryptionKey().has_value());
+    EXPECT_FALSE(tx.hasLoanAuditorEncryptedPrincipal());
+    EXPECT_FALSE(tx.getLoanAuditorEncryptedPrincipal().has_value());
+    EXPECT_FALSE(tx.hasBorrowerEncryptedAmountOwed());
+    EXPECT_FALSE(tx.getBorrowerEncryptedAmountOwed().has_value());
+    EXPECT_FALSE(tx.hasBrokerEncryptedAmountOwed());
+    EXPECT_FALSE(tx.getBrokerEncryptedAmountOwed().has_value());
+    EXPECT_FALSE(tx.hasLoanAuditorEncryptedAmountOwed());
+    EXPECT_FALSE(tx.getLoanAuditorEncryptedAmountOwed().has_value());
+    EXPECT_FALSE(tx.hasBorrowerEncryptedPeriodicPayment());
+    EXPECT_FALSE(tx.getBorrowerEncryptedPeriodicPayment().has_value());
+    EXPECT_FALSE(tx.hasBrokerEncryptedPeriodicPayment());
+    EXPECT_FALSE(tx.getBrokerEncryptedPeriodicPayment().has_value());
+    EXPECT_FALSE(tx.hasLoanAuditorEncryptedPeriodicPayment());
+    EXPECT_FALSE(tx.getLoanAuditorEncryptedPeriodicPayment().has_value());
+    EXPECT_FALSE(tx.hasAmountOwedCommitment());
+    EXPECT_FALSE(tx.getAmountOwedCommitment().has_value());
+    EXPECT_FALSE(tx.hasPeriodicPaymentCommitment());
+    EXPECT_FALSE(tx.getPeriodicPaymentCommitment().has_value());
 }
 
 }
