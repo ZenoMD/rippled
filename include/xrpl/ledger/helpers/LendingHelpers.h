@@ -136,6 +136,10 @@ checkOptionalBrokerCoverInflow(SLE::ConstRef vault, SLE::ConstRef broker, STAmou
 bool
 checkLendingProtocolDependencies(Rules const& rules, STTx const& tx);
 
+// Confidential lending builds on LendingProtocolV1_1 and ConfidentialTransfer.
+bool
+checkConfidentialLendingDependencies(Rules const& rules);
+
 /**
  * The accounts and asset that LoanManage::defaultLoan's fixCleanup3_4_0
  * freeze/lock exemption applies to.

@@ -64,6 +64,12 @@ LoanBrokerCoverDeposit::preclaim(PreclaimContext const& ctx)
         JLOG(ctx.j.warn()) << "Account is not the owner of the LoanBroker.";
         return tecNO_PERMISSION;
     }
+    // A confidential LoanBroker has no First-Loss Capital.
+    if (sleBroker->isFlag(lsfLoanBrokerConfidential))
+    {
+        JLOG(ctx.j.warn()) << "LoanBroker is confidential.";
+        return tecNO_PERMISSION;
+    }
     auto const vault = ctx.view.read(keylet::vault(sleBroker->at(sfVaultID)));
     if (!vault)
     {

@@ -769,11 +769,12 @@ class InvariantsMisc_test : public InvariantsBase
             }
         }
 
-        // LoanBroker sfFlags immutability is gated on featureLendingProtocolV1_2,
-        // so without it a flag change is not caught by this invariant.
+        // LoanBroker sfFlags immutability is gated on featureLendingProtocolV1_2
+        // or featureConfidentialLendingProtocol, so without them a flag change
+        // is not caught by this invariant.
         {
             doInvariantCheck(
-                Env{*this, all_ - featureLendingProtocolV1_2},
+                Env{*this, all_ - featureLendingProtocolV1_2 - featureConfidentialLendingProtocol},
                 {},
                 [&](Account const&, Account const&, ApplyContext& ac) {
                     auto const sle = ac.view().peek(loanBrokerKeylet);

@@ -223,7 +223,8 @@ inline constexpr FlagValue tfUniversalMask = ~tfUniversal;
         MASK_ADJ(0))                                                                                                                                           \
                                                                                                                                                                \
     TRANSACTION(LoanBrokerSet,                                                                                                                                 \
-        TF_FLAG(tfLoanBrokerPrivate, 0x00010000),                                                                                                              \
+        TF_FLAG(tfLoanBrokerPrivate, 0x00010000)                                                                                                               \
+        TF_FLAG(tfLoanBrokerConfidential, 0x00020000),                                                                                                         \
         MASK_ADJ(0))                                                                                                                                           \
                                                                                                                                                                \
     TRANSACTION(SponsorshipSet,                                                                                                                                \

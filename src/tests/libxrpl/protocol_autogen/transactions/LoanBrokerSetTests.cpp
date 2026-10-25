@@ -37,6 +37,8 @@ TEST(TransactionsLoanBrokerSetTests, BuilderSettersRoundTrip)
     auto const coverRateMinimumValue = canonical_UINT32();
     auto const coverRateLiquidationValue = canonical_UINT32();
     auto const domainIDValue = canonical_UINT256();
+    auto const holderEncryptionKeyValue = canonical_VL();
+    auto const zKProofValue = canonical_VL();
 
     LoanBrokerSetBuilder builder{
         accountValue,
@@ -53,6 +55,8 @@ TEST(TransactionsLoanBrokerSetTests, BuilderSettersRoundTrip)
     builder.setCoverRateMinimum(coverRateMinimumValue);
     builder.setCoverRateLiquidation(coverRateLiquidationValue);
     builder.setDomainID(domainIDValue);
+    builder.setHolderEncryptionKey(holderEncryptionKeyValue);
+    builder.setZKProof(zKProofValue);
 
     auto tx = builder.build(publicKey, secretKey);
 
@@ -132,6 +136,22 @@ TEST(TransactionsLoanBrokerSetTests, BuilderSettersRoundTrip)
         EXPECT_TRUE(tx.hasDomainID());
     }
 
+    {
+        auto const& expected = holderEncryptionKeyValue;
+        auto const actualOpt = tx.getHolderEncryptionKey();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfHolderEncryptionKey should be present";
+        expectEqualField(expected, *actualOpt, "sfHolderEncryptionKey");
+        EXPECT_TRUE(tx.hasHolderEncryptionKey());
+    }
+
+    {
+        auto const& expected = zKProofValue;
+        auto const actualOpt = tx.getZKProof();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfZKProof should be present";
+        expectEqualField(expected, *actualOpt, "sfZKProof");
+        EXPECT_TRUE(tx.hasZKProof());
+    }
+
 }
 
 // 2 & 4) Start from an STTx, construct a builder from it, build a new wrapper,
@@ -156,6 +176,8 @@ TEST(TransactionsLoanBrokerSetTests, BuilderFromStTxRoundTrip)
     auto const coverRateMinimumValue = canonical_UINT32();
     auto const coverRateLiquidationValue = canonical_UINT32();
     auto const domainIDValue = canonical_UINT256();
+    auto const holderEncryptionKeyValue = canonical_VL();
+    auto const zKProofValue = canonical_VL();
 
     // Build an initial transaction
     LoanBrokerSetBuilder initialBuilder{
@@ -172,6 +194,8 @@ TEST(TransactionsLoanBrokerSetTests, BuilderFromStTxRoundTrip)
     initialBuilder.setCoverRateMinimum(coverRateMinimumValue);
     initialBuilder.setCoverRateLiquidation(coverRateLiquidationValue);
     initialBuilder.setDomainID(domainIDValue);
+    initialBuilder.setHolderEncryptionKey(holderEncryptionKeyValue);
+    initialBuilder.setZKProof(zKProofValue);
 
     auto initialTx = initialBuilder.build(publicKey, secretKey);
 
@@ -245,6 +269,20 @@ TEST(TransactionsLoanBrokerSetTests, BuilderFromStTxRoundTrip)
         expectEqualField(expected, *actualOpt, "sfDomainID");
     }
 
+    {
+        auto const& expected = holderEncryptionKeyValue;
+        auto const actualOpt = rebuiltTx.getHolderEncryptionKey();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfHolderEncryptionKey should be present";
+        expectEqualField(expected, *actualOpt, "sfHolderEncryptionKey");
+    }
+
+    {
+        auto const& expected = zKProofValue;
+        auto const actualOpt = rebuiltTx.getZKProof();
+        ASSERT_TRUE(actualOpt.has_value()) << "Optional field sfZKProof should be present";
+        expectEqualField(expected, *actualOpt, "sfZKProof");
+    }
+
 }
 
 // 3) Verify wrapper throws when constructed from wrong transaction type.
@@ -316,6 +354,10 @@ TEST(TransactionsLoanBrokerSetTests, OptionalFieldsReturnNullopt)
     EXPECT_FALSE(tx.getCoverRateLiquidation().has_value());
     EXPECT_FALSE(tx.hasDomainID());
     EXPECT_FALSE(tx.getDomainID().has_value());
+    EXPECT_FALSE(tx.hasHolderEncryptionKey());
+    EXPECT_FALSE(tx.getHolderEncryptionKey().has_value());
+    EXPECT_FALSE(tx.hasZKProof());
+    EXPECT_FALSE(tx.getZKProof().has_value());
 }
 
 }

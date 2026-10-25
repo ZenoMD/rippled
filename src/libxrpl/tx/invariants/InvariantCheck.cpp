@@ -1299,9 +1299,11 @@ NoModifiedUnmodifiableFields::finalize(
                     kFieldChanged(before, after, sfManagementFeeRate) ||
                     kFieldChanged(before, after, sfCoverRateMinimum) ||
                     kFieldChanged(before, after, sfCoverRateLiquidation);
-                // LoanBroker flags (lsfLoanBrokerPrivate) only exist from
-                // featureLendingProtocolV1_2 onwards and are set at creation.
-                if (view.rules().enabled(featureLendingProtocolV1_2))
+                // LoanBroker flags (lsfLoanBrokerPrivate, lsfLoanBrokerConfidential)
+                // only exist from featureLendingProtocolV1_2 or
+                // featureConfidentialLendingProtocol onwards and are set at creation.
+                if (view.rules().enabled(featureLendingProtocolV1_2) ||
+                    view.rules().enabled(featureConfidentialLendingProtocol))
                     bad = bad || kFieldChanged(before, after, sfFlags);
                 break;
             case ltLOAN:

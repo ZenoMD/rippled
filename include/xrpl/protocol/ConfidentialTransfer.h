@@ -133,6 +133,24 @@ UInt256
 getConvertContextHash(AccountID const& account, UInt192 const& issuanceID, std::uint32_t sequence);
 
 /**
+ * @brief Generates the context hash for a confidential LoanBrokerSet.
+ *
+ * Binds the Schnorr proof (for Broker Key registration) to this specific
+ * LoanBrokerSet. The layout matches getConvertContextHash, with the
+ * LoanBrokerSet transaction type in place of ConfidentialMPTConvert.
+ *
+ * @param account    The LoanBroker owner's account ID.
+ * @param issuanceID The issuance ID of the Vault's asset.
+ * @param sequence   The transaction sequence number or a ticket number.
+ * @return A 256-bit context hash unique to this transaction.
+ */
+UInt256
+getLoanBrokerSetContextHash(
+    AccountID const& account,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence);
+
+/**
  * @brief Generates the context hash for ConfidentialMPTConvertBack transactions.
  *
  * Creates a unique 256-bit hash that binds the zero-knowledge proofs to

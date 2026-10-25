@@ -236,6 +236,13 @@ checkLendingProtocolDependencies(Rules const& rules, STTx const& tx)
     return true;
 }
 
+bool
+checkConfidentialLendingDependencies(Rules const& rules)
+{
+    return rules.enabled(featureConfidentialLendingProtocol) &&
+        rules.enabled(featureLendingProtocolV1_1) && rules.enabled(featureConfidentialTransfer);
+}
+
 std::optional<LoanDefaultFreezeExemptAccounts>
 getLoanDefaultFreezeExemptAccounts(ReadView const& view, STTx const& tx)
 {

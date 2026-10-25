@@ -797,6 +797,8 @@ TRANSACTION(ttLOAN_BROKER_SET, 74, LoanBrokerSet,
     {sfCoverRateMinimum, SoeOptional},
     {sfCoverRateLiquidation, SoeOptional},
     {sfDomainID,             SoeOptional},
+    {sfHolderEncryptionKey,  SoeOptional},
+    {sfZKProof,              SoeOptional},
 }))
 
 /** This transaction deletes a Loan Broker */
@@ -925,6 +927,38 @@ TRANSACTION(ttLOAN_PAY, 84, LoanPay,
     ({
     {sfLoanID, SoeRequired},
     {sfAmount, SoeRequired, SoeMptSupported},
+}))
+
+/** This transaction draws funds from a Vault into a confidential Loan Broker's
+    Lending Balance */
+#if TRANSACTION_INCLUDE
+#   include <xrpl/tx/transactors/lending/LoanBrokerDraw.h>
+#endif
+TRANSACTION(ttLOAN_BROKER_DRAW, 97, LoanBrokerDraw,
+    ({
+        .amendment = featureConfidentialLendingProtocol,
+        .privileges = Privilege::MustModifyVault,
+    }),
+    ({
+    {sfLoanBrokerID, SoeRequired},
+    {sfAmount, SoeRequired, SoeMptSupported},
+    {sfHolderEncryptedAmount, SoeRequired},
+    {sfIssuerEncryptedAmount, SoeRequired},
+    {sfAuditorEncryptedAmount, SoeRequired},
+    {sfBlindingFactor, SoeRequired},
+}))
+
+/** This transaction merges a confidential Loan Broker's Lending Balance inbox
+    into its spending balance */
+#if TRANSACTION_INCLUDE
+#   include <xrpl/tx/transactors/lending/LoanBrokerMergeInbox.h>
+#endif
+TRANSACTION(ttLOAN_BROKER_MERGE_INBOX, 98, LoanBrokerMergeInbox,
+    ({
+        .amendment = featureConfidentialLendingProtocol,
+    }),
+    ({
+    {sfLoanBrokerID, SoeRequired},
 }))
 
 /** This transaction type converts into confidential MPT balance. */

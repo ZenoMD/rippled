@@ -11,6 +11,7 @@
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/LedgerFormats.h>
+#include <xrpl/protocol/MPTIssue.h>
 #include <xrpl/protocol/SField.h>
 #include <xrpl/protocol/STAmount.h>
 #include <xrpl/protocol/STLedgerEntry.h>
@@ -103,6 +104,53 @@ ValidLoanBroker::goodZeroDirectory(ReadView const& view, SLE::ConstRef dir, beas
                                "OwnerCount has an unexpected entry in the directory";
             return false;
         }
+    }
+
+    return true;
+}
+
+bool
+ValidLoanBroker::goodConfidentialBroker(
+    ReadView const& view,
+    SLE::ConstRef broker,
+    beast::Journal const& j)
+{
+    if (!view.rules().enabled(featureConfidentialLendingProtocol))
+    {
+        JLOG(j.fatal()) << "Invariant failed: confidential Loan Broker without amendment";
+        return false;
+    }
+
+    if (broker->at(sfManagementFeeRate) != 0 || broker->at(sfCoverRateMinimum) != 0 ||
+        broker->at(sfCoverRateLiquidation) != 0 || broker->at(sfCoverAvailable) != beast::kZero)
+    {
+        JLOG(j.fatal()) << "Invariant failed: confidential Loan Broker has fees or cover";
+        return false;
+    }
+
+    // A deleted broker no longer has a Lending Balance
+    if (!view.exists(keylet::loanBroker(broker->key())))
+        return true;
+
+    auto const vault = view.read(keylet::vault(broker->at(sfVaultID)));
+    if (!vault)
+        return true;  // Reported by finalize
+    Asset const vaultAsset = vault->at(sfAsset);
+    if (!vaultAsset.holds<MPTIssue>())
+    {
+        JLOG(j.fatal()) << "Invariant failed: confidential Loan Broker asset is not an MPT";
+        return false;
+    }
+
+    auto const lending =
+        view.read(keylet::mptoken(vaultAsset.get<MPTIssue>().getMptID(), broker->at(sfAccount)));
+    if (!lending || !lending->isFieldPresent(sfHolderEncryptionKey) ||
+        !lending->isFieldPresent(sfConfidentialBalanceSpending) ||
+        !lending->isFieldPresent(sfConfidentialBalanceInbox) ||
+        !lending->isFieldPresent(sfIssuerEncryptedBalance))
+    {
+        JLOG(j.fatal()) << "Invariant failed: confidential Loan Broker has no Lending Balance";
+        return false;
     }
 
     return true;
@@ -235,12 +283,15 @@ ValidLoanBroker::finalize(
                 return false;
             }
 
-            if ((after->getFlags() & ~lsfLoanBrokerPrivate) != 0)
+            if ((after->getFlags() & ~(lsfLoanBrokerPrivate | lsfLoanBrokerConfidential)) != 0)
             {
                 JLOG(j.fatal()) << "Invariant failed: Loan Broker contains an unknown flag";
                 return false;
             }
         }
+
+        if (after->isFlag(lsfLoanBrokerConfidential) && !goodConfidentialBroker(view, after, j))
+            return false;
 
         // If `LoanBroker.OwnerCount = 0` the `DirectoryNode` will have at most
         // one node (the root), which will only hold entries for `RippleState`

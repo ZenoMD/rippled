@@ -1488,6 +1488,9 @@ ValidVault::finalize(
             case ttLOAN_MANAGE:
             case ttLOAN_PAY:
                 return true;
+            case ttLOAN_BROKER_DRAW:
+                // Checked by LoanBrokerDraw::finalizeInvariants
+                return true;
 
             default:
                 // LCOV_EXCL_START

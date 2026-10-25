@@ -239,6 +239,58 @@ public:
     {
         return this->tx_->isFieldPresent(sfDomainID);
     }
+
+    /**
+     * @brief Get sfHolderEncryptionKey (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getHolderEncryptionKey() const
+    {
+        if (hasHolderEncryptionKey())
+        {
+            return this->tx_->at(sfHolderEncryptionKey);
+        }
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfHolderEncryptionKey is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasHolderEncryptionKey() const
+    {
+        return this->tx_->isFieldPresent(sfHolderEncryptionKey);
+    }
+
+    /**
+     * @brief Get sfZKProof (SoeOptional)
+     * @return The field value, or std::nullopt if not present.
+     */
+    [[nodiscard]]
+    protocol_autogen::Optional<SF_VL::type::value_type>
+    getZKProof() const
+    {
+        if (hasZKProof())
+        {
+            return this->tx_->at(sfZKProof);
+        }
+        return std::nullopt;
+    }
+
+    /**
+     * @brief Check if sfZKProof is present.
+     * @return True if the field is present, false otherwise.
+     */
+    [[nodiscard]]
+    bool
+    hasZKProof() const
+    {
+        return this->tx_->isFieldPresent(sfZKProof);
+    }
 };
 
 /**
@@ -370,6 +422,28 @@ public:
     setDomainID(std::decay_t<typename SF_UINT256::type::value_type> const& value)
     {
         object_[sfDomainID] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfHolderEncryptionKey (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBrokerSetBuilder&
+    setHolderEncryptionKey(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfHolderEncryptionKey] = value;
+        return *this;
+    }
+
+    /**
+     * @brief Set sfZKProof (SoeOptional)
+     * @return Reference to this builder for method chaining.
+     */
+    LoanBrokerSetBuilder&
+    setZKProof(std::decay_t<typename SF_VL::type::value_type> const& value)
+    {
+        object_[sfZKProof] = value;
         return *this;
     }
 

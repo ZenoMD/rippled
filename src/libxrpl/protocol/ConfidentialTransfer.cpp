@@ -12,7 +12,9 @@
 #include <xrpl/protocol/STBlob.h>
 #include <xrpl/protocol/STLedgerEntry.h>
 #include <xrpl/protocol/STObject.h>
+#include <xrpl/protocol/Serializer.h>
 #include <xrpl/protocol/TER.h>
+#include <xrpl/protocol/TxFormats.h>
 #include <xrpl/protocol/UintTypes.h>
 
 #include <openssl/rand.h>
@@ -108,6 +110,24 @@ getConvertContextHash(AccountID const& account, UInt192 const& issuanceID, std::
     mpt_get_convert_context_hash(
         toAccountId(account), toIssuanceId(issuanceID), sequence, result.data());
     return result;
+}
+
+UInt256
+getLoanBrokerSetContextHash(
+    AccountID const& account,
+    UInt192 const& issuanceID,
+    std::uint32_t sequence)
+{
+    // Same layout as mpt_get_convert_context_hash, which hard-codes the
+    // ConfidentialMPTConvert transaction type.
+    Serializer s;
+    s.add16(ttLOAN_BROKER_SET);
+    s.addBitString(account);
+    s.addBitString(issuanceID);
+    s.add32(sequence);
+    s.addBitString(account);
+    s.add32(0);
+    return s.getSHA512Half();
 }
 
 UInt256

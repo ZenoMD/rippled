@@ -11,6 +11,7 @@
 #include <xrpl/ledger/helpers/VaultHelpers.h>
 #include <xrpl/protocol/AccountID.h>
 #include <xrpl/protocol/Asset.h>
+#include <xrpl/protocol/ConfidentialTransfer.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/LedgerFormats.h>
@@ -36,6 +37,11 @@ bool
 LoanBrokerSet::checkExtraFeatures(PreflightContext const& ctx)
 {
     if (!ctx.rules.enabled(featureLendingProtocolV1_2) && ctx.tx.isFieldPresent(sfDomainID))
+        return false;
+    // tfLoanBrokerConfidential is gated by getFlagsMask
+    bool const confidentialFields =
+        ctx.tx.isFieldPresent(sfHolderEncryptionKey) || ctx.tx.isFieldPresent(sfZKProof);
+    if (confidentialFields && !checkConfidentialLendingDependencies(ctx.rules))
         return false;
     return checkLendingProtocolDependencies(ctx.rules, ctx.tx);
 }
@@ -75,6 +81,12 @@ LoanBrokerSet::preflight(PreflightContext const& ctx)
         {
             return temINVALID;
         }
+
+        // A LoanBroker can only be made confidential when it is created
+        if (tx.isFlag(tfLoanBrokerConfidential))
+        {
+            return temINVALID;
+        }
     }
     else
     {
@@ -110,6 +122,30 @@ LoanBrokerSet::preflight(PreflightContext const& ctx)
         }
     }
 
+    bool const hasKey = tx.isFieldPresent(sfHolderEncryptionKey);
+    bool const hasProof = tx.isFieldPresent(sfZKProof);
+    if (tx.isFlag(tfLoanBrokerConfidential))
+    {
+        // The Broker Key and its proof of knowledge are both required
+        if (!hasKey || !hasProof)
+            return temMALFORMED;
+
+        if (!isValidCompressedECPoint(tx[sfHolderEncryptionKey]) ||
+            tx[sfZKProof].size() != kEcSchnorrProofLength)
+            return temMALFORMED;
+
+        // A confidential LoanBroker has no management fee and no First-Loss
+        // Capital
+        if (tx[~sfManagementFeeRate].value_or(0) != 0 ||
+            tx[~sfCoverRateMinimum].value_or(0) != 0 ||
+            tx[~sfCoverRateLiquidation].value_or(0) != 0)
+            return temINVALID;
+    }
+    else if (hasKey || hasProof)
+    {
+        return temMALFORMED;
+    }
+
     return tesSUCCESS;
 }
 
@@ -124,12 +160,101 @@ LoanBrokerSet::getValueFields()
 std::uint32_t
 LoanBrokerSet::getFlagsMask(PreflightContext const& ctx)
 {
-    if (ctx.rules.enabled(featureLendingProtocolV1_2))
-    {
-        return tfLoanBrokerSetMask;
-    }
-    return tfUniversalMask;
+    auto mask = tfLoanBrokerSetMask;
+    if (!ctx.rules.enabled(featureLendingProtocolV1_2))
+        mask |= tfLoanBrokerPrivate;
+    if (!checkConfidentialLendingDependencies(ctx.rules))
+        mask |= tfLoanBrokerConfidential;
+    return mask;
 }
+
+XRPAmount
+LoanBrokerSet::calculateBaseFee(ReadView const& view, STTx const& tx)
+{
+    if (tx.isFlag(tfLoanBrokerConfidential))
+        return Transactor::calculateBaseFee(view, tx, kConfidentialFeeMultiplier);
+    return Transactor::calculateBaseFee(view, tx);
+}
+
+namespace {
+
+// A confidential LoanBroker needs a CashBasis Vault whose asset is a
+// transferable MPT that can be held confidentially and has issuer and auditor
+// keys, and a proof that the submitter knows the Broker Key.
+TER
+preclaimConfidential(PreclaimContext const& ctx, SLE::ConstRef sleVault, Asset const& asset)
+{
+    if (!asset.holds<MPTIssue>())
+    {
+        JLOG(ctx.j.warn()) << "Confidential LoanBroker requires an MPT Vault asset.";
+        return tecNO_PERMISSION;
+    }
+    auto const issuanceID = asset.get<MPTIssue>().getMptID();
+
+    auto const sleIssuance = ctx.view.read(keylet::mptokenIssuance(issuanceID));
+    if (!sleIssuance || !sleIssuance->isFlag(lsfMPTCanHoldConfidentialBalance) ||
+        !sleIssuance->isFlag(lsfMPTCanTransfer) ||
+        !sleIssuance->isFieldPresent(sfIssuerEncryptionKey) ||
+        !sleIssuance->isFieldPresent(sfAuditorEncryptionKey))
+    {
+        JLOG(ctx.j.warn()) << "Vault asset does not support confidential lending.";
+        return tecNO_PERMISSION;
+    }
+
+    if (getVaultVersion(sleVault) != VaultVersion::CashBasis)
+    {
+        JLOG(ctx.j.warn()) << "Confidential LoanBroker requires a CashBasis Vault.";
+        return tecNO_PERMISSION;
+    }
+
+    auto const contextHash = getLoanBrokerSetContextHash(
+        ctx.tx[sfAccount], issuanceID, ctx.tx.getSeqProxy().value());
+    if (!isTesSuccess(
+            verifySchnorrProof(ctx.tx[sfHolderEncryptionKey], ctx.tx[sfZKProof], contextHash)))
+    {
+        JLOG(ctx.j.warn()) << "Invalid proof of knowledge for the Broker Key.";
+        return tecBAD_PROOF;
+    }
+
+    return tesSUCCESS;
+}
+
+// Initialize the Lending Balance on the LoanBroker pseudo-account's MPToken:
+// register the Broker Key and set every confidential balance to the canonical
+// encrypted zero, computed for the pseudo-account.
+TER
+initLendingBalance(
+    ApplyView& view,
+    AccountID const& pseudoId,
+    Asset const& asset,
+    Slice const& brokerKey)
+{
+    auto const issuanceID = asset.get<MPTIssue>().getMptID();
+    auto const sleIssuance = view.read(keylet::mptokenIssuance(issuanceID));
+    auto const sleMptoken = view.peek(keylet::mptoken(issuanceID, pseudoId));
+    if (!sleIssuance || !sleMptoken)
+        return tecINTERNAL;  // LCOV_EXCL_LINE
+
+    auto const zero = encryptCanonicalZeroAmount(brokerKey, pseudoId, issuanceID);
+    auto const issuerZero =
+        encryptCanonicalZeroAmount((*sleIssuance)[sfIssuerEncryptionKey], pseudoId, issuanceID);
+    auto const auditorZero =
+        encryptCanonicalZeroAmount((*sleIssuance)[sfAuditorEncryptionKey], pseudoId, issuanceID);
+    if (!zero || !issuerZero || !auditorZero)
+        return tecINTERNAL;  // LCOV_EXCL_LINE
+
+    (*sleMptoken)[sfHolderEncryptionKey] = brokerKey;
+    (*sleMptoken)[sfConfidentialBalanceSpending] = *zero;
+    (*sleMptoken)[sfConfidentialBalanceInbox] = *zero;
+    (*sleMptoken)[sfIssuerEncryptedBalance] = *issuerZero;
+    (*sleMptoken)[sfAuditorEncryptedBalance] = *auditorZero;
+    (*sleMptoken)[sfConfidentialBalanceVersion] = 0;
+    view.update(sleMptoken);
+
+    return tesSUCCESS;
+}
+
+}  // namespace
 
 TER
 LoanBrokerSet::preclaim(PreclaimContext const& ctx)
@@ -211,6 +336,12 @@ LoanBrokerSet::preclaim(PreclaimContext const& ctx)
         {
             JLOG(ctx.j.warn()) << "Vault pseudo-account is frozen.";
             return ter;
+        }
+
+        if (tx.isFlag(tfLoanBrokerConfidential))
+        {
+            if (auto const ter = preclaimConfidential(ctx, sleVault, asset))
+                return ter;
         }
     }
 
@@ -363,6 +494,14 @@ LoanBrokerSet::doApply()
             broker->setFlag(lsfLoanBrokerPrivate);
             if (auto const domainID = tx[~sfDomainID])
                 broker->setFieldH256(sfDomainID, *domainID);
+        }
+
+        if (tx.isFlag(tfLoanBrokerConfidential))
+        {
+            broker->setFlag(lsfLoanBrokerConfidential);
+            if (auto const ter =
+                    initLendingBalance(view, pseudoId, vaultAsset, tx[sfHolderEncryptionKey]))
+                return ter;
         }
 
         view.insert(broker);

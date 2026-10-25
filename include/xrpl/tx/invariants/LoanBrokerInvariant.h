@@ -60,6 +60,11 @@ class ValidLoanBroker
     static bool
     goodZeroDirectory(ReadView const& view, SLE::ConstRef dir, beast::Journal const& j);
 
+    // A confidential LoanBroker has no fees or cover, and its pseudo-account's
+    // MPToken carries the Lending Balance.
+    static bool
+    goodConfidentialBroker(ReadView const& view, SLE::ConstRef broker, beast::Journal const& j);
+
 public:
     void
     visitEntry(bool, SLE::ConstRef, SLE::ConstRef);
